@@ -1,5 +1,7 @@
 #lang racket
 
-(require syntax/param)
+(provide (all-defined-out))
 
-(define-syntax-parameter current-module-name #f)
+(define module-name (make-parameter #f))
+(define functor-name (make-parameter #f))
+(define functor-local-name (make-parameter #f))

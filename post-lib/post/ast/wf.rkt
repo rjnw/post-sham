@@ -2,20 +2,21 @@
 
 (require "core.rkt"
          (submod "core.rkt" metadata))
-
+(require (prefix-in r: racket))
 (provide (all-defined-out))
 
 (define decl? ast:decl?)
 (define (deep-decl? d)
   (and (decl? d)
-       (symbol? (ast:decl-name d))
+       (r:symbol? (ast:decl-name d))
        (deep-signature? (ast:decl-sig d))))
 
 (define (mark-deep-wf-sig! s [v #t])
   (if (and (ast:ast-md s)
            (metadata:ast:signature:signature? (ast:ast-md s)))
       (metadata:ast:signature:set-signature-wf?! (ast:ast-md s) v)
-      (ast:set-ast-md! s (metadata:ast:signature:signature v))))
+      (ast:set-ast-md! s (metadata:ast:signature:signature v)))
+  s)
 
 (define signature? ast:signature:signature?)
 (define (deep-signature? s)
@@ -40,6 +41,7 @@
   (and (kind? s)
        (deep-signature? (ast:signature:kind-type s))))
 
+(define void? ast:signature:void?)
 (define symbol? ast:signature:symbol?)
 (define string? ast:signature:string?)
 (define integer? ast:signature:integer?)
