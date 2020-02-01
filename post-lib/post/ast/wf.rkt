@@ -83,5 +83,5 @@
   (define lit? ast:expr:lit?)
   (define app? ast:expr:app?)
   (define switch? ast:expr:switch?)
-  (define block? ast:expr:block?)
+  (define begin? ast:expr:begin?)
   (define while? ast:expr:while?))

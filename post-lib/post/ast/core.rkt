@@ -19,6 +19,7 @@
     (struct string signature [])
     (struct integer signature [])
     (struct void signature [])
+    (struct bool signature [])
     (struct list signature [element])
     (struct cons signature [a d])
     (struct record signature [name decls])      ;[symbol (list decl)]
@@ -58,7 +59,7 @@
     (struct lit expr [value])                    ;[any]
     (struct app expr [rator rands])              ;[expr (list expr)]
     (struct switch expr [test branches default]) ;[expr (list (cons expr expr)) expr]
-    (struct block expr [exprs])                  ;[(list expr)]
+    (struct begin expr [exprs])                  ;[(list expr)]
     (struct while expr [test body])))
 
 (require (prefix-in ast: (submod "." ast))
@@ -98,7 +99,7 @@
       (struct literal expr [])
       (struct app expr [])
       (struct switch expr [])
-      (struct block expr [])
+      (struct begin expr [])
       (struct while expr []))))
 
 (module metadata racket

@@ -1,10 +1,10 @@
 #lang racket
 
-(require "core.rkt"
-         "pp.rkt"
-         (prefix-in wf: "wf.rkt")
-         (prefix-in wfe: (submod "wf.rkt" expr))
-         (prefix-in ce: (submod "constructor.rkt" expr)))
+(require "ast/core.rkt"
+         "ast/pp.rkt"
+         (prefix-in wf: "ast/wf.rkt")
+         (prefix-in wfe: (submod "ast/wf.rkt" expr))
+         (prefix-in ce: (submod "ast/constructor.rkt" expr)))
 (provide (all-defined-out))
 
 (define current-functor (make-parameter '()))
@@ -38,3 +38,7 @@
 
 (define (try-coerce val sig)
   val)
+
+
+(define interpreting? (make-parameter #f))
+(define current-interpreter (make-parameter #f))

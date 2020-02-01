@@ -1,35 +1,40 @@
 #lang racket
 
-(require "core.rkt"
+(require (for-template racket "core.rkt")
          (prefix-in atsyntax- "../parameters/syntax.rkt"))
 
-(require syntax/parse)
+(require syntax/parse
+         racket/syntax)
 
 (module* ast #f
-  (require (prefix-in md: (submod "core.rkt" _metadata ast)))
+  (require (for-template (prefix-in md: (submod "core.rkt" _metadata ast))))
 
   (provide (all-defined-out))
   (define (decl name-stx sig-stx)
     #`(ast:decl (md:decl #'#,name-stx) '#,name-stx #,sig-stx))
 
   (module* signature #f
-    (require (prefix-in sig: (submod "constructor.rkt" signature)))
-    (require (prefix-in mds: (submod "core.rkt" _metadata ast signature)))
+    (require (for-template (prefix-in sig: (submod "constructor.rkt" signature))))
+    (require (for-template (prefix-in mds: (submod "core.rkt" _metadata ast signature))))
     (provide (all-defined-out))
     (define (signature inferred-name stx)
       (syntax-parse stx
-        [(~datum symbol) #`(sig:symbol)]
-        [(~datum string) #`(sig:string)]
-        [(~datum integer) #`(sig:integer)]
+        [(~datum symbol) (symbol)]
+        [(~datum string) (string)]
+        [(~datum integer) (integer)]
         [((~datum list) s) (list #'s)]
         [((~datum cons) a b) (cons #'a #'b)]
+        [(~datum bool) (bool)]
         [((~datum record) (i:id s:expr) ...)
          (record inferred-name (syntax->list #`(i ...)) (syntax->list #`(s ...)))]
         [((~datum module) (i:id s:expr) ...)
-         (module inferred-name (syntax->list #`(i ...) (syntax->list #`(s ...))))]
-        [((~datum functor) (i:id s:expr) ... r:expr)
+         (module inferred-name (syntax->list #`(i ...)) (syntax->list #`(s ...)))]
+        [((~or (~datum ->)
+               (~datum functor))
+          (i:id s:expr) ... r:expr)
          (functor inferred-name (syntax->list #`(i ...)) (syntax->list #`(s ...)) #'r)]
         [s #`s]))
+    (define (bool) #`(sig:bool))
     (define (symbol) #`(sig:symbol))
     (define (string) #`(sig:string))
     (define (integer) #`(sig:integer))
@@ -42,27 +47,28 @@
         #`(sig:cons sa sb)))
     (define (record iname is ss)
       (with-syntax ([(sds ...) (map decl is (map signature is ss))]
-                    [name (if iname iname (generate-temporaries '(record)))])
+                    [name (if iname iname (generate-temporary 'record))])
         #`(sig:record 'name `(,sds ...) (mds:record #f #'name))))
     (define (module iname is ss)
       (with-syntax ([(sds ...) (map decl is (map signature is ss))]
-                    [name (if iname iname (generate-temporaries '(module)))])
+                    [name (if iname iname (generate-temporary 'module))])
         #`(sig:module 'name `(,sds ...) (mds:module #f #'name))))
     (define (functor iname is ss r)
       (with-syntax ([(sds ...) (map decl is (map signature is ss))]
-                    [name (if iname iname (generate-temporaries '(functor)))]
+                    [name (if iname iname (generate-temporary 'functor))]
                     [rs (signature #f r)])
         #`(sig:functor 'name `(,sds ...) rs (mds:functor #f #'name)))))
 
   (module* expr #f
-    (require (prefix-in cs: (submod "constructor.rkt" signature))
-             (prefix-in ce: (submod "constructor.rkt" expr))
-             (prefix-in sig: (submod ".." signature))
-             (prefix-in mde: (submod "core.rkt" _metadata ast expr))
-             (prefix-in mds: (submod "core.rkt" _metadata ast signature))
-             (prefix-in rt: "runtime.rkt"))
+    (require (for-template (prefix-in cs: (submod "constructor.rkt" signature))
+                           (prefix-in ce: (submod "constructor.rkt" expr))
+                           (prefix-in mde: (submod "core.rkt" _metadata ast expr))
+                           (prefix-in mds: (submod "core.rkt" _metadata ast signature))
+                           (prefix-in rt: "runtime.rkt"))
+             (prefix-in sig: (submod ".." signature)))
+    (provide (all-defined-out))
 
-    (define ((functor name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx) bodyb k)
+    (define ((functor-k name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx) bodyb k)
       (parameterize ([atsyntax-functor-name (cons name-stx (atsyntax-functor-name))])
         (with-syntax ([name name-stx]
                       [(arg-names ...) arg-names-stx]
@@ -97,8 +103,11 @@
                                    #,(bodyb #'body #'ret-sig-name))))
                              #:md (mde:functor))])
                     #,(k #'functor-name #'functor-sig-name))))))))
+    (define (functor name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx)
+      (define builder (functor-k name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx))
+      (builder (λ (a b) a) (λ (a b) a)))
 
-    (define ((module name-stx sig-stx body-stxs) bodyb k)
+    (define ((module-k name-stx sig-stx body-stxs) bodyb k)
       (parameterize ([atsyntax-module-name (cons name-stx (atsyntax-module-name))])
         (with-syntax
           ([name name-stx]
@@ -124,7 +133,7 @@
                            #:md (mde:module))])
                   #,(k #'module-name #'sig-name)))))))
 
-    (define ((let sig-stx var-stxs var-sig-stxs val-stxs body-stxs) bodyb k)
+    (define ((let-k sig-stx var-stxs var-sig-stxs val-stxs body-stxs) bodyb k)
       (with-syntax ([(var-sigs ...) (map sig:signature var-stxs var-sig-stxs)])
         (with-syntax
           ([(let-name) (generate-temporaries `(let))]
@@ -158,8 +167,8 @@
       #`(ce:app (rt:functor-return (rt:typeof #,rator-stx)) #,rator-stx (list #,@rand-stxs)))
     (define (switch sig-stx test-stx branch-pair-stxs default-stx)
       #`(ce:switch #,sig-stx #,test-stx #,@branch-pair-stxs #,default-stx))
-    (define (block sig-stx expr-stxs)
-      #`(ce:block #,sig-stx (list #,@expr-stxs)))
+    (define (begin sig-stx expr-stxs)
+      #`(ce:begin #,sig-stx (list #,@expr-stxs)))
     (define (while sig-stx test-stx body-stx)
       #`(ce:block #,sig-stx #,test-stx #,body-stx))
     (define (void) #`(ce:void))))

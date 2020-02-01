@@ -2,7 +2,8 @@
 
 (require "core.rkt"
          (submod "core.rkt" metadata)
-         (prefix-in wf- "wf.rkt"))
+         (prefix-in wf- "wf.rkt")
+         "pp.rkt")
 
 (module* signature #f
   (provide (except-out (all-defined-out) sig-md))
@@ -13,6 +14,7 @@
     (wf-mark-deep-wf-sig! (ast:signature:kind md s)))
   (define (void [md #f]) (ast:signature:void md))
   (define (symbol [md #f]) (ast:signature:symbol md))
+  (define (bool [md #f]) (ast:signature:bool md))
   (define (string [md #f]) (ast:signature:string md))
   (define (integer) (ast:signature:integer #f))
   (define (list of [md #f])
@@ -32,7 +34,7 @@
   (define (module name defs [md #f])
     (unless (and (andmap wf-deep-decl? defs)
                  (symbol? name))
-      (error 'post:signature:wf "signature for module fields not well formed. name: ~a, defs: ~a" name defs))
+      (error 'post:signature:wf "signature for module fields not well formed. name: ~a, defs: ~a" name (map pp:decl defs)))
     (wf-mark-deep-wf-sig! (ast:signature:module md name defs)))
   (define (functor name args ret [md #f])
     (unless (and (symbol? name)
@@ -62,7 +64,7 @@
     (ast:expr:app md sig rator rands))
   (define (switch sig test branches default #:md [md #f])
     (ast:expr:switch md sig test branches default))
-  (define (block sig exprs #:md [md #f])
-    (ast:expr:block md sig exprs))
+  (define (begin sig exprs #:md [md #f])
+    (ast:expr:begin md sig exprs))
   (define (while sig test body #:md [md #f])
     (ast:expr:while md sig test body)))
