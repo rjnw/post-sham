@@ -10,7 +10,7 @@
   (provide (all-defined-out))
 
   (struct ast [(md #:mutable)])
-  (struct decl ast [name sig])
+  (struct decl ast [name (sig #:mutable)])
   (module* signature #f
     (provide (all-defined-out))
     (struct signature ast [])
@@ -54,8 +54,8 @@
     (struct record expr [vals appb]              ;[(list (cons decl expr))]
       #:property prop:procedure record-app-builder)
     (struct let expr [vars vals bodyb])          ;[(list decl) (list expr) expr]
-    (struct var expr [sym])                      ;[symbol]
-    (struct literal expr [value])                ;[any]
+    (struct ref expr [decl])                     ;[decl]
+    (struct lit expr [value])                    ;[any]
     (struct app expr [rator rands])              ;[expr (list expr)]
     (struct switch expr [test branches default]) ;[expr (list (cons expr expr)) expr]
     (struct block expr [exprs])                  ;[(list expr)]
@@ -93,8 +93,8 @@
       (struct functor expr [])
       (struct module expr [])
       (struct record expr [])
-      (struct var expr [syn])
-      (struct let expr [var-syns])
+      (struct ref expr [])
+      (struct let expr [])
       (struct literal expr [])
       (struct app expr [])
       (struct switch expr [])

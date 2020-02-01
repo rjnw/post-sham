@@ -70,3 +70,18 @@
        (symbol? (ast:signature:functor-name s))
        (andmap deep-decl? (ast:signature:functor-args s))
        (deep-signature? (ast:signature:functor-ret s))))
+
+(module* expr #f
+  (provide (all-defined-out))
+  (define expr? ast:expr:expr?)
+  (define void? ast:expr:void?)
+  (define functor? ast:expr:functor?)
+  (define module? ast:expr:module?)
+  (define record? ast:expr:record?)
+  (define let? ast:expr:let?)
+  (define ref? ast:expr:ref?)
+  (define lit? ast:expr:lit?)
+  (define app? ast:expr:app?)
+  (define switch? ast:expr:switch?)
+  (define block? ast:expr:block?)
+  (define while? ast:expr:while?))

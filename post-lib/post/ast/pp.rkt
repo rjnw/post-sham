@@ -26,7 +26,8 @@
     [(s:record md name decls) `(record ,name ,(map pp:decl decls) #:md ,(pp:md md))]
     [(s:module md name defs) `(module ,name ,(map pp:decl defs) #:md ,(pp:md md))]
     [(s:functor md name args ret) `(functor ,name ,(map pp:decl args) ,(pp:sig ret) #:md ,(pp:md md))]
-    [(s:signature md) `(unknown-signature ,(pp:md md))]))
+    [(s:signature md) `(unknown-signature ,(pp:md md))]
+    [else `(unknown ,sig)]))
 
 (define (pp:expr e)
   (match e
@@ -45,9 +46,9 @@
         ,(map ppv vars vals)
         #:md ,(pp:md md)
         ,(pp:expr body))]
-    [(e:var md s sym)
-     `(var ,(pp:sig s) ,sym #:md ,(pp:md md))]
-    [(e:literal md s val)
+    [(e:ref md s dec)
+     `(ref ,(pp:sig s) ,(pp:decl dec) #:md ,(pp:md md))]
+    [(e:lit md s val)
      `(lit ,(pp:sig s) ,val)]
     [(e:app md s rator rands)
      `(app ,(pp:sig s) ,(pp:expr rator) ,(map pp:expr rands))]
@@ -62,7 +63,8 @@
      `(block ,(pp:sig s) ,@(map pp:expr es))]
     [(e:while md s test body)
      `(block ,(pp:sig s) ,(pp:expr test) ,(pp:expr body))]
-    [(e:expr md s) `(unknown-expr ,(pp:sig s))]))
+    [(e:expr md s) `(unknown-expr ,(pp:sig s))]
+    [else `(unknown ,e)]))
 
 (define (pp:md md)
   (match md
@@ -77,8 +79,8 @@
     [(me:functor) `(me:functor)]
     [(me:module) `(me:module)]
     [(me:record) `(me:record)]
-    [(me:var syn) `(me:var ,syn)]
-    [(me:let var-syns) `(me:var ,var-syns)]
+    [(me:ref) `(me:ref)]
+    [(me:let) `(me:let)]
     [(me:literal) `(me:literal)]
     [(me:app) `(me:app)]
     [(me:switch) `(me:switch)]
