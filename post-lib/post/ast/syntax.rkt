@@ -64,7 +64,7 @@
                            (prefix-in ce: (submod "constructor.rkt" expr))
                            (prefix-in mde: (submod "core.rkt" _metadata ast expr))
                            (prefix-in mds: (submod "core.rkt" _metadata ast signature))
-                           (prefix-in rt: "runtime.rkt"))
+                           (prefix-in rt: post/runtime))
              (prefix-in sig: (submod ".." signature)))
     (provide (all-defined-out))
 
@@ -98,7 +98,7 @@
                                               [rt:current-functor-input
                                                (cons input-name (rt:current-functor-input))])
                                  (match-let ([(list arg-names ...)
-                                              (map rt:functor-input (map rt:isof? input-name
+                                              (map rt:functor-input (map rt:check-isof? input-name
                                                                          (list arg-sig-names ...)))])
                                    #,(bodyb #'body #'ret-sig-name))))
                              #:md (mde:functor))])
@@ -136,28 +136,28 @@
     (define ((let-k sig-stx var-stxs var-sig-stxs val-stxs body-stxs) bodyb k)
       (with-syntax ([(var-sigs ...) (map sig:signature var-stxs var-sig-stxs)])
         (with-syntax
-          ([(let-name) (generate-temporaries `(let))]
+          ([let-name (generate-temporary 'let)]
+           [let-input (generate-temporary 'let-input)]
            [(vars ...) var-stxs]
            [(vals ...) val-stxs]
            [(var-decls ...) (map decl var-stxs (syntax->list #`(var-sigs ...)))]
            [(var-decl-names ...) (generate-temporaries var-stxs)]
-           [(sig-name) (generate-temporaries `(let-signature))]
+           [sig-name (generate-temporary 'let-signature)]
            [sig (sig:signature #f sig-stx)])
-          (with-syntax ([(var-refs ...) (map ref (syntax->list #`(var-decl-names ...)))])
-            (parameterize ([atsyntax-let-vars (cons var-stxs (atsyntax-let-vars))])
-              #`(let* ([var-decl-names var-decls]
-                       ...
-                       [vars var-refs]
-                       ...
-                       [sig-name sig]
-                       [let-name
-                        (ce:let
-                         sig-name
-                         (list var-decl-names ...)
-                         (map rt:try-coerce (list vals ...) (list var-sigs ...))
-                         #,(bodyb body-stxs #'sig-name)
-                         #:md (mde:let))])
-                  #,(k #'let-name #'sig-name)))))))
+          (parameterize ([atsyntax-let-vars (cons var-stxs (atsyntax-let-vars))])
+            #`(let* ([var-decl-names var-decls]
+                     ...
+                     [sig-name sig]
+                     [let-name
+                      (ce:let
+                       sig-name
+                       (list var-decl-names ...)
+                       (list vals ...)
+                       (λ let-input
+                         (match-let ([(list vars ...) (map rt:try-coerce let-input (list var-sigs))])
+                           #,(bodyb body-stxs #'sig-name)))
+                       #:md (mde:let))])
+                #,(k #'let-name #'sig-name))))))
 
     (define (ref dcl-stx)
       #`(ce:ref (ast:decl-sig #,dcl-stx) #,dcl-stx))

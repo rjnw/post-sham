@@ -54,7 +54,7 @@
          (keyword-apply appb kws kw-args rst))))
     (struct record expr [vals appb]              ;[(list (cons decl expr))]
       #:property prop:procedure record-app-builder)
-    (struct let expr [vars vals bodyb])          ;[(list decl) (list expr) expr]
+    (struct let expr [vars vals body])          ;[(list decl) (list expr) expr]
     (struct ref expr [decl])                     ;[decl]
     (struct lit expr [value])                    ;[any]
     (struct app expr [rator rands])              ;[expr (list expr)]

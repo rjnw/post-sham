@@ -29,13 +29,13 @@
                                                                   (map (build-switch-case (post-cdr inp))
                                                                        (cdr transition)))
                                                (if (memq (car transition) (fsa end))
-                                                   post-true
-                                                   post-false))))))
+                                                   true
+                                                   false))))))
                  (define ((build-switch-case next) tpair)
                    (post-switch-case (car tpair)
                                      (do-transition (cdr tpair) next)))
                  (post-define (match [inp (list symbol)] bool)
-                              (do-transition start inp)))))
+                              (do-transition (fsa start) inp)))))
 
 (define-syntax (fsa-post-module stx)
   (syntax-parse stx
@@ -45,7 +45,7 @@
           (syntax->list #'(state ...)))
      #'(post-instantiate-module
         build-fsa-module
-        (post-module fsa-sig
+        (post-module #:signature fsa-sig
          [post-define start 'start^]
          [post-define end '(end^ ...)]
          [post-define transitions `((state^ . ((input^ . next-state^) ...)) ...)]))]))

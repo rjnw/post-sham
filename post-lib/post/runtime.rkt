@@ -7,12 +7,16 @@
          (prefix-in ce: (submod "ast/constructor.rkt" expr)))
 (provide (all-defined-out))
 
+(define current-module-context (make-parameter (make-hash)))
 (define current-functor (make-parameter '()))
 (define current-functor-input (make-parameter '()))
 
+(define (check-isof? value type-sig)
+  (unless (isof? value type-sig)
+    (error 'post:runtime:typecheck "failed isof? test: ~a, ~a" (pp:expr value) (pp:sig type-sig)))
+  value)
 (define (isof? value type-sig)
   (isof-literal? value type-sig))
-
 (define (functor-input value)
   value)
 
@@ -38,7 +42,3 @@
 
 (define (try-coerce val sig)
   val)
-
-
-(define interpreting? (make-parameter #f))
-(define current-interpreter (make-parameter #f))
