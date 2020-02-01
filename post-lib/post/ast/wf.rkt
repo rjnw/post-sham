@@ -1,7 +1,7 @@
 #lang racket
 
 (require "core.rkt"
-         (submod "core.rkt" metadata))
+         "metadata.rkt")
 (require (prefix-in r: racket))
 (provide (all-defined-out))
 

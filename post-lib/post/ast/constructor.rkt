@@ -1,7 +1,7 @@
 #lang racket
 
 (require "core.rkt"
-         (submod "core.rkt" metadata)
+         "metadata.rkt"
          (prefix-in wf- "wf.rkt")
          "pp.rkt")
 

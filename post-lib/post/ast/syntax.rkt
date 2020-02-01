@@ -7,7 +7,7 @@
          racket/syntax)
 
 (module* ast #f
-  (require (for-template (prefix-in md: (submod "core.rkt" _metadata ast))))
+  (require (for-template (prefix-in md: (submod "metadata.rkt" _metadata ast))))
 
   (provide (all-defined-out))
   (define (decl name-stx sig-stx)
@@ -15,7 +15,7 @@
 
   (module* signature #f
     (require (for-template (prefix-in sig: (submod "constructor.rkt" signature))))
-    (require (for-template (prefix-in mds: (submod "core.rkt" _metadata ast signature))))
+    (require (for-template (prefix-in mds: (submod "metadata.rkt" _metadata ast signature))))
     (provide (all-defined-out))
     (define (signature inferred-name stx)
       (syntax-parse stx
@@ -62,8 +62,8 @@
   (module* expr #f
     (require (for-template (prefix-in cs: (submod "constructor.rkt" signature))
                            (prefix-in ce: (submod "constructor.rkt" expr))
-                           (prefix-in mde: (submod "core.rkt" _metadata ast expr))
-                           (prefix-in mds: (submod "core.rkt" _metadata ast signature))
+                           (prefix-in mde: (submod "metadata.rkt" _metadata ast expr))
+                           (prefix-in mds: (submod "metadata.rkt" _metadata ast signature))
                            (prefix-in rt: post/runtime))
              (prefix-in sig: (submod ".." signature)))
     (provide (all-defined-out))
@@ -154,7 +154,7 @@
                        (list var-decl-names ...)
                        (list vals ...)
                        (λ let-input
-                         (match-let ([(list vars ...) (map rt:try-coerce let-input (list var-sigs))])
+                         (match-let ([(list vars ...) (map rt:try-coerce let-input (list var-sigs ...))])
                            #,(bodyb body-stxs #'sig-name)))
                        #:md (mde:let))])
                 #,(k #'let-name #'sig-name))))))

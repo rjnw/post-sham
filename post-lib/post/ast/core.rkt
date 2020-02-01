@@ -1,11 +1,5 @@
 #lang racket
 
-(module value racket
-  (provide (all-defined-out))
-  (struct value [(md #:mutable)])
-  (struct translated value [post sham])
-  (struct compiled value [pre bin]))
-
 (module ast racket
   (provide (all-defined-out))
 
@@ -69,43 +63,3 @@
 (provide (all-from-out (submod "." ast))
          (all-from-out (submod "." ast signature))
          (all-from-out (submod "." ast expr)))
-
-;; metadata storing syntax objects
-
-(module _metadata racket
-  (provide (all-defined-out))
-  (struct metadata [])
-  (module* ast #f
-    (provide (all-defined-out))
-    (struct ast metadata [])
-    (struct decl ast [name])
-
-    (module* signature #f
-      (provide (all-defined-out))
-      (struct signature metadata [(wf? #:mutable)])
-      (struct list signature [element])
-      (struct cons signature [a d])
-      (struct record signature [name])
-      (struct module signature [name])
-      (struct functor signature [name]))
-    (module* expr #f
-      (provide (all-defined-out))
-      (struct expr [])
-      (struct functor expr [])
-      (struct module expr [])
-      (struct record expr [])
-      (struct ref expr [])
-      (struct let expr [])
-      (struct literal expr [])
-      (struct app expr [])
-      (struct switch expr [])
-      (struct begin expr [])
-      (struct while expr []))))
-
-(module metadata racket
-  (require (prefix-in metadata:ast: (submod ".." _metadata ast))
-           (prefix-in metadata:ast:signature: (submod ".." _metadata ast signature))
-           (prefix-in metadata:ast:expr: (submod ".." _metadata ast expr)))
-  (provide (all-from-out (submod ".." _metadata ast))
-           (all-from-out (submod ".." _metadata ast signature))
-           (all-from-out (submod ".." _metadata ast expr))))
