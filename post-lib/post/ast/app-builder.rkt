@@ -6,13 +6,13 @@
 
 (provide (all-defined-out))
 
-(define generic-functor
+(define generic-function
   (make-keyword-procedure
    (λ (kws kw-args f . rst)
      (if (interpreting?)
          (begin
-           (match-let* ([(ast:expr:functor md sig bodyb _) f]
-                        [(ast:signature:functor s-md s-name arg-decls ret-sig) sig])
+           (match-let* ([(ast:expr:function name sig md bodyb _) f]
+                        [(ast:signature:function s-md arg-decls ret-sig) sig])
              ((interpreter-type-checker)
               ((interpreter)
                (apply bodyb (map (interpreter-type-checker)
@@ -22,22 +22,7 @@
               ret-sig)))
          (void)))))
 
-(define generic-module
-  (make-keyword-procedure
-   (λ (kws kw-args m . rst)
-     (void))))
-
 (define generic-record
-  (make-keyword-procedure
-   (λ (kws kw-args r . rst)
-     (void))))
-
-(define hoas-functor
-  (make-keyword-procedure
-   (λ (kws kw-args f . rst)
-     (void))))
-
-(define hoas-module
   (make-keyword-procedure
    (λ (kws kw-args m . rst)
      (void))))

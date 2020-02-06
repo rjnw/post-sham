@@ -2,8 +2,10 @@
 
 (module _pp racket
   (require (prefix-in a: (submod "core.rkt" ast))
+           (prefix-in n: (submod "core.rkt" ast name))
            (prefix-in s: (submod "core.rkt" ast signature))
            (prefix-in e: (submod "core.rkt" ast expr))
+
            (prefix-in ma: (submod "metadata.rkt" _metadata ast))
            (prefix-in ms: (submod "metadata.rkt" _metadata ast signature))
            (prefix-in me: (submod "metadata.rkt" _metadata ast expr)))
@@ -11,59 +13,45 @@
   (define debug-metadata (make-parameter #f))
   (define (decl d)
     (match d
-      [(a:decl m n s) `(,n ,(sig s) ,@(md m))]))
+      [(a:decl n s) `(,(name n) : ,(sig s))]))
 
+  (define (name n)
+    (match n
+      [(n:orig s) `(n:orig ,s)]
+      [(n:gen s) `(n:gen ,s)]))
   (define (sig s)
     (match s
-      [(s:kind m t) `(sig:kind ,(sig t) ,@(md m))]
-      [(s:symbol m) `(sig:symbol ,@(md m))]
-      [(s:string m) `(sig:string ,@(md m))]
-      [(s:integer m) `(sig:integer ,@(md m))]
-      [(s:void m) `(sig:void ,@(md m))]
-      [(s:bool m) `(sig:bool ,@(md m))]
-      [(s:list m e) `(sig:list ,(sig e) ,@(md m))]
-      [(s:cons m a d) `(sig:cons ,(sig a) ,(sig d) ,@(md m))]
-      [(s:record m name decls) `(sig:record ,name ,(map decl decls) ,@(md m))]
-      [(s:module m name defs) `(sig:module ,name ,(map decl defs) ,@(md m))]
-      [(s:functor m name args ret) `(sig:functor ,name ,(map decl args) ,(sig ret) ,@(md m))]
+      [(s:function md args ret) `(sig:function ,(map decl args) ,(sig ret))]
+      [(s:record md decls) `(sig:record ,(map decl decls))]
+      [(s:type md b) `(sig:type ,(sig b))]
+      [(s:lit md sham check coerce) `(sig:lit )]
+      [(s:rkt md check coerce) `(sig:rkt )]
+      [(s:union md subtypes) `(sig:union ,(map decl subtypes))]
+      [(s:datatype md args) `(sig:datatype ,(map decl args))]
+      [(s:forall md binds typeb) `(sig:forall ,(map decl binds))]
       [(s:signature m) `(sig:unknown-signature ,(md m))]
       [else `(sig:unknown ,s)]))
 
   (define (expr e)
     (match e
-      [(e:void m s) `void]
-      [(e:functor m s bodyb appb) `(expr:functor ,(sig s))]
-      [(e:module m s defb appb) `(expr:module ,(sig s))]
-      [(e:record m s vals appb)
-       (define (ppr d)
-         (match-define (cons dcl expr) d)
-         `(,(decl dcl) : ,(expr expr)))
-       `(expr:record ,(sig s) ,@(md m) ,(map ppr vals))]
-      [(e:let m s vars vals body)
+      [(e:function n s m bodyb appb) `(expr:function ,(sig s) ,@(md m))]
+      [(e:record n s m defb appb) `(expr:record ,(sig s) ,@(md m))]
+      [(e:let s vars vals bodyb)
        (define (ppv var val)
          `(,(decl var) : ,(expr val)))
        `(let ,(sig s)
-          ,(map ppv vars vals)
-          ,@(md m)
-          ,(expr body))]
-      [(e:ref m s dec)
-       `(expr:ref ,(sig s) ,(decl dec) ,@(md m))]
-      [(e:lit m s val)
+          ,(map ppv vars vals))]
+      [(e:mref mod s dec)
+       `(expr:ref ,(sig s) ,(decl dec))]
+      [(e:lit s val)
        `(expr:lit ,(sig s) ,val)]
-      [(e:app m s rator rands)
+      [(e:rkt s val)
+       `(expr:rkt ,(sig s) ,val)]
+      [(e:app s md rator rands)
        `(expr:app ,(sig s) ,(expr rator) ,(map expr rands))]
-      [(e:switch m s test branches default)
-       (define (pps branch)
-         `(expr:case ,(expr (car branch)) ,(expr (cdr branch))))
-       `(expr:switch ,(sig)
-                     ,(expr test)
-                     ,(map pps branches)
-                     ,(expr default))]
-      [(e:begin m s es)
-       `(expr:begin ,(sig s) ,@(map expr es))]
-      [(e:while m s test body)
-       `(expr:block ,(sig s) ,(expr test) ,(expr body))]
-      [(e:expr mp s) `(expr:unknown-expr ,(sig s))]
+      [(e:case s test branches)
+       `(expr:case ,(sig)
+                   ,(expr test) 'todo:pat)]
       [else `(expr:unknown ,e)]))
 
   (define (md m)
@@ -71,23 +59,13 @@
         `(#:md
           (match m
             [(ma:decl n) `(md:decl ,n)]
-            [(ms:list wf? e) `(ms:list #:wf? ,wf? #:element ,e)]
-            [(ms:cons wf? a d) `(ms:cons #:wf? ,wf? #:a ,a #:d ,d)]
-            [(ms:record wf? name) `(ms:record #:wf? ,wf? ,name)]
-            [(ms:module wf? name) `(ms:module #:wf? ,wf? ,name)]
-            [(ms:functor wf? name) `(ms:functor #:wf? ,wf? ,name)]
+            [(ms:record wf? name) `(ms:module #:wf? ,wf? ,name)]
+            [(ms:forall wf? memo) `(ms:functor #:wf? ,wf? ,name)]
             [(ms:signature wf?) `(ms:signature #:wf? ,wf?)]
 
-            [(me:functor) `(me:functor)]
-            [(me:module) `(me:module)]
+            [(me:function) `(me:functor)]
             [(me:record) `(me:record)]
-            [(me:ref) `(me:ref)]
-            [(me:let) `(me:let)]
-            [(me:literal) `(me:literal)]
             [(me:app) `(me:app)]
-            [(me:switch) `(me:switch)]
-            [(me:block) `(me:block)]
-            [(me:while) `(me:while)]
             [else `(md ,m)]))
         '())))
 

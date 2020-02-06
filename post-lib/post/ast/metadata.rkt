@@ -5,6 +5,7 @@
 (module _metadata racket
   (provide (all-defined-out))
   (struct metadata [])
+
   (module* ast #f
     (provide (all-defined-out))
     (struct ast metadata [])
@@ -12,13 +13,15 @@
 
     (module* signature #f
       (provide (all-defined-out))
+      (struct signature ast [(wf? #:mutable)])
       (struct forall signature [memo])
       (struct record signature [name]))
     (module* expr #f
       (provide (all-defined-out))
       (struct expr [])
-      (struct lambda expr [])
-      (struct record expr []))))
+      (struct function expr [])
+      (struct record expr [])
+      (struct app expr []))))
 
 (require (prefix-in metadata:ast: (submod "." _metadata ast))
          (prefix-in metadata:ast:signature: (submod "." _metadata ast signature))
