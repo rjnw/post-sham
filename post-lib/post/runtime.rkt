@@ -16,20 +16,13 @@
     (error 'post:runtime:typecheck "failed isof? test: ~a, ~a" (pp:expr value) (pp:sig type-sig)))
   value)
 (define (isof? value type-sig)
-  (isof-literal? value type-sig))
-(define (functor-input value)
+  #t)
+(define (validate-functor-input decl value)
   value)
-
-(define (isof-literal? value sig)
-  (cond
-    [(wf:integer? sig) (integer? value)]
-    [(wf:string? sig) (string? value)]
-    [(wf:list? sig) (and (list? value)
-                         (andmap (curryr isof? (ast:signature:list-element sig)) value))]
-    [(wf:cons? sig) (and (cons? value)
-                         (isof? (car value) (ast:signature:cons-a sig))
-                         (isof? (cdr value) (ast:signature:cons-d sig)))]
-    [(wf:void? sig) (wfe:void? value)]))
+(define (validate-let-input decl value)
+  value)
+(define (validate-forall-input decl value)
+  value)
 
 (define (infer-literal value sig)
   (define (check value sig)
