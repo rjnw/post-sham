@@ -1,23 +1,50 @@
 #lang racket
 
-(require syntax/parse/define)
+(require syntax/parse/define
+         racket/stxparam)
 
 (require (for-syntax (prefix-in ss: (submod "syntax.rkt" ast signature))
                      (prefix-in se: (submod "syntax.rkt" ast expr))
-                     racket/pretty))
+                     racket/pretty)
+         (prefix-in rkt: racket/base))
 (provide (all-defined-out))
 
-(define-syntax-parser function
-  [(_ ([inp-args:id (~optional (~datum :)) inp-types:expr] ... (~optional (~datum :)) ret-type:expr)
-      body:expr ...)
-   (se:functor (syntax-local-name)
-               (syntax->list #`(inp-args ...))
-               (syntax->list #`(inp-types ...))
-               #`ret-type
-               (se:begin (ss:signature #f #`ret-type) (syntax->list #`(body ...))))])
+;; (define-syntax-parser function
+;;   [(_ ([inp-args:id (~optional (~datum :)) inp-types:expr] ... (~optional (~datum :)) ret-type:expr)
+;;       body:expr ...)
+;;    (se:functor (syntax-local-name)
+;;                (syntax->list #`(inp-args ...))
+;;                (syntax->list #`(inp-types ...))
+;;                #`ret-type
+;;                (se:begin (ss:signature #f #`ret-type) (syntax->list #`(body ...))))])
 
-(define-syntax-parser signature
-  [(_ s) (ss:signature (syntax-local-name) #'s)])
+(define (invalid-signature-localtion stx)
+  (raise-syntax-error 'post:signature "invalid use of post signature constructor"))
+(define-syntax-parser signature-constructors
+  [(_ s:id ...)
+   (begin (define-syntax-parameter s invalid-signature-location))])
+
+(signature-constructors record union datatype forall function rkt lit)
+;; ([record record-value-transformer]
+;;                                     [union union-value-transformer]
+;;                                     [datatype datatype-value-transformer]
+;;                                     [forall forall-value-tranformer]
+;;                                     [function function-value-transformer]
+;;                                     [rkt rkt-value-transformer]
+;;                                     [lit lit-value-transformer])
+(define-syntax-parser (define-signature stx)
+  [(_ name:id s:expr)
+   #`(begin
+       (define-syntax name
+                (make-post-signature-info
+                 (λ ()
+                   (cons #`name (post-signature-info
+                                 #,(parameterize-signature-constructors-for-syntax #`s))))))
+       (syntax-parameterize ([current-signature-define #`name])
+         (define name
+           #,(parameterize-signature-constructors-for-value #`s))))])
+;; (define-syntax-parser signature
+;;   [(_ s) (ss:signature (syntax-local-name) #'s)])
 
 ;; (define-syntax (module stx)
 ;;   (syntax-parse stx
