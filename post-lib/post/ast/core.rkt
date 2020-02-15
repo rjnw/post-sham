@@ -19,9 +19,9 @@
     (struct rkt signature [check/c coerce])
     (struct function signature [args ret])    ;[(list decl) sig]
     (struct union signature [subtypes])       ;[(list decl)]
-    (struct datatype signature [args])         ;[(list decl)]
+    (struct datatype signature [args])        ;[(list decl)]
     (struct record signature [defs])          ;[(list decl)]
-    (struct forall signature [binds typeb]));[. (list decl) sig]
+    (struct forall signature [binds typeb]))  ;[(list decl) sig]
 
   (module* expr #f
     (provide (except-out (all-defined-out)
