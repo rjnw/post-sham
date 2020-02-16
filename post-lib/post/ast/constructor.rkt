@@ -26,7 +26,7 @@
     (ast:signature:datatype md  args))
   (define (record decls #:md [md #f])
     (unless (andmap wf-deep-decl? decls)
-      (error 'post:signature:wf "signature for record fields not well formed. name: ~a, decls: ~a" decls))
+      (error 'post:signature:wf "signature for record fields not well formed. decls: ~a" decls))
     (wf-mark-deep-wf-sig! (ast:signature:record md decls)))
   (define (forall binds type #:md [md #f])
     (ast:signature:forall md binds type))

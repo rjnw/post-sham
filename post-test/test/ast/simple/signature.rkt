@@ -1,6 +1,7 @@
 #lang racket
 
 (require post/ast/simple
+         post/parameters/syntax
          post/ast/pp
          post/ast/rkt)
 

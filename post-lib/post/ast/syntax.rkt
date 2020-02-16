@@ -1,13 +1,12 @@
 #lang racket
 
-(require (for-template racket "core.rkt")
-         (prefix-in atsyntax- "../parameters/syntax.rkt"))
-
-(require syntax/parse
-         racket/syntax)
-
-(module* ast #f
-  (require (for-template (prefix-in md: (submod "metadata.rkt" _metadata ast))))
+(module ast racket
+  (require (for-template racket
+                         "core.rkt"
+                         (prefix-in md: (submod "metadata.rkt" _metadata ast)))
+           (prefix-in atsyntax- "../parameters/atsyntax.rkt")
+           syntax/parse
+           racket/syntax)
 
   (provide (all-defined-out))
   (define (decl name-stx sig-stx) #`(ast:decl #'#,name-stx #,sig-stx))
@@ -28,9 +27,8 @@
       #`(cs:rkt #,chk #,coerce))
     (define record
       (case-lambda
-        [(name def-names def-sigs) #`(cs:record #,(map decl def-names def-sigs)
-                                   #:md (cs:md:record #,name))]
-        [(name defs) #`(cs:record defs #:md (cs:md:record #,name))]))
+        [(def-names def-sigs) #`(cs:record `(list #,@(map decl def-names def-sigs)))]
+        [(defs) #`(cs:record defs)]))
     (define function
       (case-lambda
         [(arg-names arg-sigs ret-sig) #`(cs:function #,(map decl arg-names arg-sigs) #,ret-sig)]
@@ -169,3 +167,107 @@
       #`(rt:infer-literal #,val-stx #,maybe-sig-stx))
     (define (app rator-stx rand-stxs)
       #`(ce:app (rt:functor-return (rt:typeof #,rator-stx)) #,rator-stx (list #,@rand-stxs)))))
+
+(module value-transformer racket
+  (module* signature #f
+    (require (prefix-in ast: (submod ".." ".." ast signature))
+             syntax/parse)
+    (provide (all-defined-out))
+    (define (record stx)
+      (syntax-parse stx
+        [(_ [def:id s:expr] ...)
+         (define ret (ast:record (syntax->list #`(def ...)) (syntax->list #`(s ...))))
+         (pretty-print (syntax->datum ret))
+         ret]))
+    (define (union stx) (error 'post:signature))
+    (define (datatype stx) (error 'post:signature))
+    (define (forall stx) (error 'post:signature))
+    (define (function stx) (error 'post:signature))
+    (define (rkt stx)
+      (syntax-parse stx
+        [(_ chk:expr coerce:expr)
+         (ast:rkt #`chk #`coerce)]))
+    (define (lit stx) (error 'post:signature))))
+
+(module syntax-transformer racket
+  (module* signature #f
+    (provide (all-defined-out))
+    (require (for-template racket))
+    (define (record stx) #'42)
+    (define (union stx) #'42)
+    (define (datatype stx) #'42)
+    (define (forall stx) #'42)
+    (define (function stx) #'42)
+    (define (rkt stx) #'42)
+    (define (lit stx) #'42)))
+
+(module definers racket
+  (require (for-template racket
+                         racket/stxparam
+                         post/parameters/syntax)
+           racket/stxparam
+           post/parameters/syntax
+           (prefix-in vts- (submod ".." value-transformer signature))
+           (for-syntax (prefix-in sts- (submod ".." syntax-transformer signature)))
+           (prefix-in atsyntax- post/parameters/atsyntax)
+           (prefix-in st: (submod post/ast/transformer info signature)))
+  (define (build-define-value name value)
+    #`(define #,name #,value))
+  (define (build-define-syntax name value)
+    #`(define-syntax #,name #,value))
+
+  (module* signature #f
+    (provide value
+             define-value
+             define-transformer)
+    (define (build-decl-info gen-name orig-name vstx)
+      (with-syntax ([gn gen-name])
+        #`(st:dsignature #'#,gen-name #,vstx)))
+    (define (parameterize-constructors
+             record-value
+             union-value
+             datatype-value
+             forall-value
+             function-value
+             rkt-value
+             lit-value
+             stx)
+      #`(syntax-parameterize ([record #,record-value]
+                              [union #,union-value]
+                              [datatype #,datatype-value]
+                              [forall #,forall-value]
+                              [function #,function-value]
+                              [rkt #,rkt-value]
+                              [lit #,lit-value])
+          #,stx))
+
+    (define (parameterize-constructors-for-value sig-stx)
+      (parameterize-constructors
+       #`vts-record
+       #`vts-union
+       #`vts-datatype
+       #`vts-forall
+       #`vts-function
+       #`vts-rkt
+       #`vts-lit
+       sig-stx))
+
+    (define (parameterize-constructors-for-syntax sig-stx)
+      (parameterize-constructors
+       #`sts-record
+       #`sts-union
+       #`sts-datatype
+       #`sts-forall
+       #`sts-function
+       #`sts-rkt
+       #`sts-lit
+       sig-stx))
+
+    (define (value infer-name sig-stx)
+      (parameterize-constructors-for-value sig-stx))
+    (define (define-value gen-name orig-name sig-stx)
+      (build-define-value gen-name (value orig-name sig-stx)))
+    (define (define-transformer gen-name orig-name sig-stx)
+      (build-define-syntax orig-name
+                           (build-decl-info gen-name orig-name
+                                            (parameterize-constructors-for-syntax sig-stx))))))

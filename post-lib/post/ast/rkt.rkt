@@ -8,7 +8,7 @@
   [(_ i:id chk:expr coerce:expr)
    #`(define-signature i (rkt chk coerce))]
   [(_ (i:id v:id ...) chk:expr coerce:expr)
-   #`(define-signature i (type-forall [v ...] (rkt chk coerce)))])
+   #`(define-signature i (forall [v ...] (rkt chk coerce)))])
 (define-syntax-parser define-rkt-types
   [(_ (t:expr c:expr) ...)
    #`(begin (define-rkt-type t c) ...)])

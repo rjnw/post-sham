@@ -46,7 +46,7 @@
     (struct mref expr [mod decl])                ;[module-path decl]
     (struct rkt expr [value])                    ;[any]
     (struct lit expr [value])                    ;[any]
-    (struct app expr [md rator rands])              ;[expr (list expr)]
+    (struct app expr [md rator rands])           ;[expr (list expr)]
     (struct case expr [test branches]))          ;[expr (list (cons pat expr))]
 
   (module* pat #f

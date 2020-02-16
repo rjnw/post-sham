@@ -1,10 +1,12 @@
 #lang racket
 
 (require syntax/parse/define
-         racket/stxparam)
+         racket/stxparam
+         (for-syntax racket/syntax))
 
 (require (for-syntax (prefix-in ss: (submod "syntax.rkt" ast signature))
                      (prefix-in se: (submod "syntax.rkt" ast expr))
+                     (prefix-in sds: (submod "syntax.rkt" definers signature))
                      racket/pretty)
          (prefix-in rkt: racket/base))
 (provide (all-defined-out))
@@ -18,33 +20,18 @@
 ;;                #`ret-type
 ;;                (se:begin (ss:signature #f #`ret-type) (syntax->list #`(body ...))))])
 
-(define (invalid-signature-localtion stx)
-  (raise-syntax-error 'post:signature "invalid use of post signature constructor"))
-(define-syntax-parser signature-constructors
-  [(_ s:id ...)
-   (begin (define-syntax-parameter s invalid-signature-location))])
-
-(signature-constructors record union datatype forall function rkt lit)
-;; ([record record-value-transformer]
-;;                                     [union union-value-transformer]
-;;                                     [datatype datatype-value-transformer]
-;;                                     [forall forall-value-tranformer]
-;;                                     [function function-value-transformer]
-;;                                     [rkt rkt-value-transformer]
-;;                                     [lit lit-value-transformer])
-(define-syntax-parser (define-signature stx)
+(define-syntax-parser define-signature
   [(_ name:id s:expr)
-   #`(begin
-       (define-syntax name
-                (make-post-signature-info
-                 (λ ()
-                   (cons #`name (post-signature-info
-                                 #,(parameterize-signature-constructors-for-syntax #`s))))))
-       (syntax-parameterize ([current-signature-define #`name])
-         (define name
-           #,(parameterize-signature-constructors-for-value #`s))))])
-;; (define-syntax-parser signature
-;;   [(_ s) (ss:signature (syntax-local-name) #'s)])
+   (let* ([gen-name (generate-temporary #'name)]
+          [compile-time-defs (sds:define-transformer gen-name #`name #`s)]
+          [run-time-defs (sds:define-value gen-name #`name #`s)])
+     #`(begin #,compile-time-defs
+              #,run-time-defs))])
+(define-syntax-parser signature
+  [(_ s:expr) (sds:value (if (syntax-local-name)
+                             (syntax-local-name)
+                             (generate-temporary #'signature))
+                         #`s)])
 
 ;; (define-syntax (module stx)
 ;;   (syntax-parse stx
@@ -69,3 +56,9 @@
 
 ;; (define (add-to-module name mod value)
 ;;   (printf "adding ~a to mod ~a\n" name (post-module-name mod)))
+
+(module+ test
+  (require post/parameters/syntax
+           (for-syntax post/parameters/syntax))
+  ;; (define-signature test (record [a 1]))
+  )

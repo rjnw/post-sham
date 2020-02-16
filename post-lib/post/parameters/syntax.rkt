@@ -1,12 +1,21 @@
 #lang racket
 
-(provide (all-defined-out))
+(require racket/stxparam
+         syntax/parse/define)
 
-(define record-name (make-parameter #f))
-(define record-local-name (make-parameter #f))
-(define context-name (make-parameter #f))
+(provide record union datatype forall function rkt lit)
 
-(define function-name (make-parameter #f))
-(define function-local-name (make-parameter #f))
+(define-syntax-parser syntax-constructors
+  [(_ s:id ...)
+   #`(begin
+       (define-syntax-parameter s
+         (λ (stx)
+           (raise-syntax-error 'post:signature
+                               "invalid use of post constructor" stx))) ...)])
 
-(define let-vars (make-parameter #f))
+(syntax-constructors record union datatype forall function rkt lit)
+
+
+(module+ test
+  (syntax-parameterize ([record (λ (stx) #'32)])
+    record))
