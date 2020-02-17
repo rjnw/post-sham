@@ -25,13 +25,16 @@
       #`(cs:lit #,st #,m #,c))
     (define (rkt chk coerce)
       #`(cs:rkt #,chk #,coerce))
+    (define (union subs)
+      #`(cs:union #,@subs))
     (define record
       (case-lambda
         [(def-names def-sigs) #`(cs:record `(list #,@(map decl def-names def-sigs)))]
         [(defs) #`(cs:record defs)]))
     (define function
       (case-lambda
-        [(arg-names arg-sigs ret-sig) #`(cs:function #,(map decl arg-names arg-sigs) #,ret-sig)]
+        [(arg-names arg-sigs ret-sig)
+         #`(cs:function #,(map decl arg-names arg-sigs) #,ret-sig)]
         [(arg-decls ret-sig) #`(cs:function (list #,@arg-decls) #,ret-sig)]))
     (define (forall bind-names bind-sigs type-stx)
       (with-syntax ([(bds ...) (map decl bind-names bind-sigs)]
@@ -41,7 +44,9 @@
         #`(let (binds-decls (list bds ...))
             (cs:forall binds-decls
                        (λ forall-input
-                         (match-let [(list #,@bind-names) (map rt:validate-forall-input binds-decls forall-input)]
+                         (match-let
+                             [(list #,@bind-names)
+                              (map rt:validate-forall-input binds-decls forall-input)]
                            (parameterize ([rt:current-forall-binds
                                            (cons (map cons binds-decls forall-input)
                                                  (rt:current-forall-binds))])
@@ -54,23 +59,27 @@
              (prefix-in sig: (submod ".." signature)))
     (provide (all-defined-out))
 
-    (define ((function-k maybe-name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx) bodyb k)
+    (define ((function-k maybe-name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx)
+             bodyb k)
       (define ((default hint) stx) (if stx stx hint))
 
       (parameterize ([atsyntax-function-name (cons maybe-name-stx (atsyntax-function-name))])
         (with-syntax ([nast (name maybe-name-stx)]
                       [(arg-names ...) (map name arg-names-stx)]
-                      [(arg-names-temp ...) (map (default #'post-function-arg-name) arg-names-stx)]
+                      [(arg-names-temp ...)
+                       (map (default #'post-function-arg-name) arg-names-stx)]
                       [(arg-sigs ...) arg-sigs-stx]
                       [ret-sig ret-sig-stx]
                       [body body-stx]
-                      [(args-sig-name ret-sig-name) (generate-temporaries `(post-function-args-sig
-                                                                            post-function-ret-sig))]
+                      [(args-sig-name ret-sig-name)
+                       (generate-temporaries `(post-function-args-sig
+                                               post-function-ret-sig))]
                       [(input-name) (generate-temporary 'post-function-input)]
                       [(function-name function-sig-name function-decl-name)
-                       (generate-temporaries `(,(if maybe-name-stx maybe-name-stx 'post-function)
-                                               post-function-signature
-                                               post-function-decl))])
+                       (generate-temporaries
+                        `(,(if maybe-name-stx maybe-name-stx 'post-function)
+                          post-function-signature
+                          post-function-decl))])
           (with-syntax ([(arg-sig-decls ...) (map decl
                                                   (syntax->list #`(arg-names ...))
                                                   (syntax->list #`(arg-sigs ...)))]
@@ -87,10 +96,13 @@
                            nast
                            function-sig-name
                            (λ input-name
-                             (parameterize ([rt:current-function (cons (cons function-decl-name function-name)
-                                                                       (rt:current-function))]
-                                            [rt:current-function-input (cons (map cons args-sig-name input-name)
-                                                                             (rt:current-function-input))])
+                             (parameterize
+                                 ([rt:current-function
+                                   (cons (cons function-decl-name function-name)
+                                         (rt:current-function))]
+                                  [rt:current-function-input
+                                   (cons (map cons args-sig-name input-name)
+                                         (rt:current-function-input))])
                                (match-let ([(list arg-names-temp ...)
                                             (map rt:validate-function-input
                                                  args-sig-name input-name)])
@@ -111,8 +123,11 @@
            [record-sig sig-stx])
           (with-syntax
             ([record-decl (decl #'nast #'record-sig-name)])
-            (parameterize ([atsyntax-context-name (cons #'record-input-context-name (atsyntax-context-name))]
-                           [atsyntax-record-local-name (cons #'record-name (atsyntax-record-local-name))])
+            (parameterize
+                ([atsyntax-context-name
+                  (cons #'record-input-context-name (atsyntax-context-name))]
+                 [atsyntax-record-local-name
+                  (cons #'record-name (atsyntax-record-local-name))])
               #`(let* ([record-sig-name record-sig]
                        [record-decl-name record-decl])
                   (letrec ([record-name
@@ -120,16 +135,24 @@
                              nast
                              record-sig-name
                              (λ (record-input-context-name)
-                               (parameterize ([rt:current-record
-                                               (cons (cons record-decl-name record-name) (rt:current-record))]
-                                              [rt:current-record-input-context
-                                               (cons record-input-context-name (rt:current-record-input-context))]
-                                              [rt:current-record-collector
-                                               (rt:new-record-collector)])
-                                 (begin #,@(bodyb body-stxs #'record-sig-name #'record-input-context-name)
-                                        (rt:check-valid-record-collected (rt:current-record-collector)
-                                                                         record-sig-name)
-                                        (rt:current-record-collector))))
+                               (parameterize
+                                   ([rt:current-record
+                                     (cons (cons record-decl-name record-name)
+                                           (rt:current-record))]
+                                    [rt:current-record-input-context
+                                     (cons record-input-context-name
+                                           (rt:current-record-input-context))]
+                                    [rt:current-record-collector
+                                     (rt:new-record-collector)])
+                                 (begin
+                                   #,@(bodyb
+                                       body-stxs
+                                       #'record-sig-name
+                                       #'record-input-context-name)
+                                   (rt:check-valid-record-collected
+                                    (rt:current-record-collector)
+                                    record-sig-name)
+                                   (rt:current-record-collector))))
                              #:md (mde:record))])
                     #,(k #'record-name #'record-sig-name #'record-decl-name))))))))
     (define (record name-stx sig-stx body-stxs)
@@ -139,7 +162,8 @@
     (define ((let-k sig-stx var-stxs var-sig-stxs val-stxs body-stxs) bodyb k)
       (with-syntax
         ([(let-name let-input-name let-sig-name var-decls-name)
-          (generate-temporaries `(post-let post-let-input post-let-signature post-let-var-decls))]
+          (generate-temporaries
+           `(post-let post-let-input post-let-signature post-let-var-decls))]
          [(vars ...) var-stxs]
          [(vals ...) val-stxs]
          [(var-decls ...) (map decl (map name var-stxs) var-sig-stxs)]
@@ -153,7 +177,10 @@
                      var-decls-name
                      (list vals ...)
                      (λ let-input-name
-                       (match-let ([(list vars ...) (map rt:validate-let-input var-decls-name let-input-name)])
+                       (match-let ([(list vars ...)
+                                    (map rt:validate-let-input
+                                         var-decls-name
+                                         let-input-name)])
                          #,(bodyb body-stxs #'let-sig-name)))
                      #:md (mde:let))])
               #,(k #'let-name #'let-sig-name)))))
@@ -166,40 +193,77 @@
     (define (lit val-stx maybe-sig-stx)
       #`(rt:infer-literal #,val-stx #,maybe-sig-stx))
     (define (app rator-stx rand-stxs)
-      #`(ce:app (rt:functor-return (rt:typeof #,rator-stx)) #,rator-stx (list #,@rand-stxs)))))
+      #`(ce:app (rt:functor-return (rt:typeof #,rator-stx))
+                #,rator-stx
+                (list #,@rand-stxs)))))
 
 (module value-transformer racket
   (module* signature #f
     (require (prefix-in ast: (submod ".." ".." ast signature))
+             (prefix-in p: (for-template post/parameters/syntax))
              syntax/parse)
     (provide (all-defined-out))
     (define (record stx)
       (syntax-parse stx
         [(_ [def:id s:expr] ...)
-         (define ret (ast:record (syntax->list #`(def ...)) (syntax->list #`(s ...))))
-         (pretty-print (syntax->datum ret))
-         ret]))
-    (define (union stx) (error 'post:signature))
-    (define (datatype stx) (error 'post:signature))
-    (define (forall stx) (error 'post:signature))
-    (define (function stx) (error 'post:signature))
+         (ast:record (syntax->list #`(def ...)) (syntax->list #`(s ...)))]))
+    (define (union stx)
+      (syntax-parse stx
+        [(_ sub:expr ...)
+         (ast:union (map (λ (s) #`(p:datatype s)) (syntax->list #`(sub ...))))]))
+    (define (datatype stx)
+      (syntax-parse stx
+        [(_ (c:id v:id ...))
+         (ast:datatype #'c (syntax->list #`(v ...)))]))
+    (define (forall stx)
+      (syntax-parse stx
+        [(_ [v:id ...] t:expr)
+         (ast:forall (syntax->list #`(v ...)) #'t)]))
+    (define (function stx)
+      (syntax-parse stx
+        [(_ [v:id vt:expr] ... ret:expr)
+         (ast:function (syntax->list #`(v ...))
+                       (syntax->list #`(vt ...))
+                       #`ret)]))
     (define (rkt stx)
       (syntax-parse stx
         [(_ chk:expr coerce:expr)
          (ast:rkt #`chk #`coerce)]))
-    (define (lit stx) (error 'post:signature))))
+    (define (lit stx)
+      (syntax-parse stx
+        [(_ sham:expr check:expr coerce:expr)
+         (ast:lit #`sham #`check #`coerce)]))))
 
 (module syntax-transformer racket
   (module* signature #f
     (provide (all-defined-out))
-    (require (for-template racket))
-    (define (record stx) #'42)
-    (define (union stx) #'42)
-    (define (datatype stx) #'42)
-    (define (forall stx) #'42)
-    (define (function stx) #'42)
-    (define (rkt stx) #'42)
-    (define (lit stx) #'42)))
+    (require (for-template racket)
+             (for-template (rename-in t: (submod "transformer.rkt" info ast signature))))
+    (define (record stx)
+      (syntax-parse stx
+        [(_ (c:id t:expr) ...)
+         #`(t:record (list #'c ...) (list t ...))]))
+    (define (union stx)
+      (syntax-parse stx
+        [(_ (c:id t:expr) ...)
+         #`(t:union (list #'c ...)
+                    (list #,@(map (λ (c t) #`(p:datatype (#,c #,t)))
+                                  (syntax->list #`(c ...))
+                                  (syntax->list #`(t ...)))))]))
+    (define (datatype stx)
+      (syntax-parse stx
+        [(_ (c:id t:expr))
+         #`(t:datatype #'c t)]))
+    (define (forall stx)
+      (syntax-parse stx
+        [(_ [v:id ...] t:expr)
+         #`(t:forall (list #'v ...) t)]))
+    (define (function stx)
+      (syntax-parse stx
+        [(_ [v:id vt:expr] ... ret:expr)
+         #`(t:function (list #'v ...) (list vt ...) ret)]))
+    (define (rkt stx) #`(t:rkt))
+    (define (lit stx) #`(t:lit))))
 
 (module definers racket
   (require (for-template racket
@@ -232,13 +296,14 @@
              rkt-value
              lit-value
              stx)
-      #`(syntax-parameterize ([record #,record-value]
-                              [union #,union-value]
-                              [datatype #,datatype-value]
-                              [forall #,forall-value]
-                              [function #,function-value]
-                              [rkt #,rkt-value]
-                              [lit #,lit-value])
+      #`(syntax-parameterize
+            ([record #,record-value]
+             [union #,union-value]
+             [datatype #,datatype-value]
+             [forall #,forall-value]
+             [function #,function-value]
+             [rkt #,rkt-value]
+             [lit #,lit-value])
           #,stx))
 
     (define (parameterize-constructors-for-value sig-stx)
@@ -268,6 +333,8 @@
     (define (define-value gen-name orig-name sig-stx)
       (build-define-value gen-name (value orig-name sig-stx)))
     (define (define-transformer gen-name orig-name sig-stx)
-      (build-define-syntax orig-name
-                           (build-decl-info gen-name orig-name
-                                            (parameterize-constructors-for-syntax sig-stx))))))
+      (build-define-syntax
+       orig-name
+       (build-decl-info gen-name
+                        orig-name
+                        (parameterize-constructors-for-syntax sig-stx))))))
