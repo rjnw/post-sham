@@ -6,6 +6,12 @@
 
 (provide (all-defined-out))
 
+(define generic-forall
+  (make-keyword-procedure
+   (λ (kws kw-args f . rst)
+     (match-let ([(ast:signature:forall md binds typeb _) f])
+       (apply typeb rst)))))
+
 (define generic-function
   (make-keyword-procedure
    (λ (kws kw-args f . rst)

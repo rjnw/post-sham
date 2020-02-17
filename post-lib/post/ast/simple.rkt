@@ -7,7 +7,9 @@
 (require (for-syntax (prefix-in ss: (submod "syntax.rkt" ast signature))
                      (prefix-in se: (submod "syntax.rkt" ast expr))
                      (prefix-in sds: (submod "syntax.rkt" definers signature))
+                     (prefix-in p: post/parameters/syntax)
                      racket/pretty)
+         (prefix-in p: post/parameters/syntax)
          (prefix-in rkt: racket/base))
 (provide (all-defined-out))
 
@@ -26,7 +28,9 @@
           [compile-time-defs (sds:define-transformer gen-name #`name #`s)]
           [run-time-defs (sds:define-value gen-name #`name #`s)])
      #`(begin #,compile-time-defs
-              #,run-time-defs))])
+              #,run-time-defs))]
+  [(_ (name:id vars:id ...) s:expr)
+   #`(define-signature name (p:forall [vars ...] s))])
 (define-syntax-parser signature
   [(_ s:expr) (sds:value (if (syntax-local-name)
                              (syntax-local-name)
@@ -60,5 +64,4 @@
 (module+ test
   (require post/parameters/syntax
            (for-syntax post/parameters/syntax))
-  ;; (define-signature test (record [a 1]))
   )

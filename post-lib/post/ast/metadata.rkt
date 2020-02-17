@@ -15,7 +15,8 @@
       (provide (all-defined-out))
       (struct signature ast [(wf? #:mutable)])
       (struct forall signature [memo])
-      (struct record signature [name]))
+      (struct record signature [name])
+      (struct datatype signature [ctor]))
     (module* expr #f
       (provide (all-defined-out))
       (struct expr [])

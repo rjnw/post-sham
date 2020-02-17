@@ -3,7 +3,7 @@
 (require racket/stxparam
          syntax/parse/define)
 
-(provide record union datatype forall function rkt lit)
+(provide record union datatype forall function rkt lit ->)
 
 (define-syntax-parser syntax-constructors
   [(_ s:id ...)
@@ -14,7 +14,7 @@
                                "invalid use of post constructor" stx))) ...)])
 
 (syntax-constructors record union datatype forall function rkt lit)
-
+(define-syntax-parameter -> (make-rename-transformer #'function))
 
 (module+ test
   (syntax-parameterize ([record (λ (stx) #'32)])

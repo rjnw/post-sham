@@ -3,14 +3,16 @@
 (require "core.rkt"
          "metadata.rkt"
          (prefix-in wf- "wf.rkt")
+         (prefix-in app-builder- "app-builder.rkt")
          "pp.rkt")
 
 (module* signature #f
   (provide (except-out (all-defined-out)))
-  (define (type n s [md #f])
-    (unless (wf-deep-signature? s)
+  (define (type s [md #f])
+    (unless (or (false? s)
+                (wf-deep-signature? s))
       (error 'post:signature:wf "signature for type base not well formed. base: ~a" s))
-    (wf-mark-deep-wf-sig! (ast:signature:type md n s)))
+    (wf-mark-deep-wf-sig! (ast:signature:type md s)))
   (define (lit sham check coerce #:md [md #f])
     (ast:signature:lit md sham check coerce))
   (define (rkt check coerce #:md [md #f])
@@ -22,14 +24,14 @@
     (wf-mark-deep-wf-sig! (ast:signature:function md args ret)))
   (define (union subtypes #:md [md #f])
     (ast:signature:union md subtypes))
-  (define (datatype args #:md [md #f])
-    (ast:signature:datatype md  args))
+  (define (datatype argts #:md [md #f])
+    (ast:signature:datatype md argts))
   (define (record decls #:md [md #f])
     (unless (andmap wf-deep-decl? decls)
-      (error 'post:signature:wf "signature for record fields not well formed. decls: ~a" decls))
+      (printf "post:signature:wf signature for record fields not well formed. decls: ~a\n" (map pp:decl decls)))
     (wf-mark-deep-wf-sig! (ast:signature:record md decls)))
-  (define (forall binds type #:md [md #f])
-    (ast:signature:forall md binds type))
+  (define (forall binds typeb [appb app-builder-generic-forall] #:md [md #f])
+    (ast:signature:forall md binds typeb appb))
 
   (define (md:record name)
     (metadata:ast:signature:record name))
@@ -38,8 +40,7 @@
 
 ;; todo perform checks
 (module* expr #f
-  (require (prefix-in sig: (submod ".." signature))
-           (prefix-in app-builder- "app-builder.rkt"))
+  (require (prefix-in sig: (submod ".." signature)))
   (provide (all-defined-out))
   (define (function name sig bodyb [appb app-builder-generic-function] #:md [md #f])
     (ast:expr:function name sig md bodyb appb))

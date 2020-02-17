@@ -39,6 +39,7 @@
            (cond
              [(record? s) (mark-wf-sig! deep-record? s)]
              [(function? s) (mark-wf-sig! deep-function? s)]
+             [(rkt? s) (mark-deep-wf-sig! s #t)]
              [else (or (symbol? s)
                        (string? s)
                        (integer? s))]))))
@@ -52,7 +53,7 @@
   (and (function? s)
        (andmap deep-decl? (ast:signature:function-args s))
        (deep-signature? (ast:signature:function-ret s))))
-
+(define rkt? ast:signature:rkt?)
 (module* expr #f
   (provide (all-defined-out))
   (define expr? ast:expr:expr?)

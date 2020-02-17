@@ -16,41 +16,44 @@
         #`(ast:name:gen #'#,(generate-temporary hint))))
 
   (module* signature #f
-    (require (for-template (prefix-in cs: (submod "constructor.rkt" signature))))
-    (require (for-template (prefix-in mds: (submod "metadata.rkt" _metadata ast signature))))
+    (require (for-template (prefix-in cs: (submod "constructor.rkt" signature))
+                           (prefix-in mds: (submod "metadata.rkt" _metadata ast signature))
+                           (prefix-in rt: post/runtime)))
     (provide (all-defined-out))
-    (define (type t)
+    (define (type (t #f))
       #`(cs:type #,t))
     (define (lit st m c)
       #`(cs:lit #,st #,m #,c))
     (define (rkt chk coerce)
       #`(cs:rkt #,chk #,coerce))
-    (define (union subs)
-      #`(cs:union #,@subs))
+    (define (union ctors subs)
+      #`(cs:union (list #,@(map decl ctors subs))))
+    (define (datatype ctor argns argts)
+      #`(cs:datatype (list #,@(map decl argns argts)) #:md (mds:datatype #f #'#,ctor)))
     (define record
       (case-lambda
-        [(def-names def-sigs) #`(cs:record `(list #,@(map decl def-names def-sigs)))]
+        [(def-names def-sigs) #`(cs:record (list #,@(map decl def-names def-sigs)))]
         [(defs) #`(cs:record defs)]))
     (define function
       (case-lambda
         [(arg-names arg-sigs ret-sig)
-         #`(cs:function #,(map decl arg-names arg-sigs) #,ret-sig)]
+         #`(cs:function (list #,@(map decl arg-names arg-sigs)) #,ret-sig)]
         [(arg-decls ret-sig) #`(cs:function (list #,@arg-decls) #,ret-sig)]))
     (define (forall bind-names bind-sigs type-stx)
       (with-syntax ([(bds ...) (map decl bind-names bind-sigs)]
-                    [(bns ...) (generate-temporaries bind-names)]
-                    [binds (generate-temporary 'forall-binds)]
+                    [binds-decls (generate-temporary 'forall-binds)]
+                    [forall-input (generate-temporary 'forall-input)]
                     [type type-stx])
-        #`(let (binds-decls (list bds ...))
+        #`(let ([binds-decls (list bds ...)])
             (cs:forall binds-decls
                        (λ forall-input
                          (match-let
-                             [(list #,@bind-names)
-                              (map rt:validate-forall-input binds-decls forall-input)]
-                           (parameterize ([rt:current-forall-binds
+                             ([(list #,@bind-names)
+                               (map rt:validate-forall-input binds-decls forall-input)])
+                           (parameterize ([rt:current-forall-input
                                            (cons (map cons binds-decls forall-input)
-                                                 (rt:current-forall-binds))])
-                             ts))))))))
+                                                 (rt:current-forall-input))])
+                             type))))))))
 
   (module* expr #f
     (require (for-template (prefix-in cs: (submod "constructor.rkt" signature))
@@ -209,16 +212,25 @@
          (ast:record (syntax->list #`(def ...)) (syntax->list #`(s ...)))]))
     (define (union stx)
       (syntax-parse stx
-        [(_ sub:expr ...)
-         (ast:union (map (λ (s) #`(p:datatype s)) (syntax->list #`(sub ...))))]))
+        [(_ (c:id ts:expr ...) ...)
+         (ast:union
+          (syntax->list #`(c ...))
+          (map (λ (c t) #`(p:datatype c #,t))
+               (syntax->list #`(c ...))
+               (syntax->list #`((ts ...) ...))))]))
     (define (datatype stx)
       (syntax-parse stx
-        [(_ (c:id v:id ...))
-         (ast:datatype #'c (syntax->list #`(v ...)))]))
+        [(_ c:id [v:id ...])
+         (ast:datatype #'c
+                       (map (const #f) (syntax->list #`(v ...)))
+                       (syntax->list #`(v ...)))]))
     (define (forall stx)
       (syntax-parse stx
         [(_ [v:id ...] t:expr)
-         (ast:forall (syntax->list #`(v ...)) #'t)]))
+         (ast:forall (syntax->list #`(v ...))
+                     (map (const (ast:type))
+                          (syntax->list #`(v ...)))
+                     #'t)]))
     (define (function stx)
       (syntax-parse stx
         [(_ [v:id vt:expr] ... ret:expr)
@@ -238,22 +250,24 @@
   (module* signature #f
     (provide (all-defined-out))
     (require (for-template racket)
-             (for-template (rename-in t: (submod "transformer.rkt" info ast signature))))
+             syntax/parse
+             (for-template (prefix-in t: (submod "transformer.rkt" info signature))
+                           (prefix-in p: post/parameters/syntax)))
     (define (record stx)
       (syntax-parse stx
         [(_ (c:id t:expr) ...)
          #`(t:record (list #'c ...) (list t ...))]))
     (define (union stx)
       (syntax-parse stx
-        [(_ (c:id t:expr) ...)
+        [(_ (c:id ts:expr ...) ...)
          #`(t:union (list #'c ...)
-                    (list #,@(map (λ (c t) #`(p:datatype (#,c #,t)))
+                    (list #,@(map (λ (c t) #`(p:datatype #,c #,t))
                                   (syntax->list #`(c ...))
-                                  (syntax->list #`(t ...)))))]))
+                                  (syntax->list #`((ts ...) ...)))))]))
     (define (datatype stx)
       (syntax-parse stx
-        [(_ (c:id t:expr))
-         #`(t:datatype #'c t)]))
+        [(_ c:id [v:id ...])
+         #`(t:datatype #'c #'(v ...))]))
     (define (forall stx)
       (syntax-parse stx
         [(_ [v:id ...] t:expr)
@@ -266,7 +280,7 @@
     (define (lit stx) #`(t:lit))))
 
 (module definers racket
-  (require (for-template racket
+  (require (for-template (except-in racket ->)
                          racket/stxparam
                          post/parameters/syntax)
            racket/stxparam
@@ -274,7 +288,8 @@
            (prefix-in vts- (submod ".." value-transformer signature))
            (for-syntax (prefix-in sts- (submod ".." syntax-transformer signature)))
            (prefix-in atsyntax- post/parameters/atsyntax)
-           (prefix-in st: (submod post/ast/transformer info signature)))
+           (prefix-in ti: (submod post/ast/transformer info))
+           (prefix-in tis: (submod post/ast/transformer info signature)))
   (define (build-define-value name value)
     #`(define #,name #,value))
   (define (build-define-syntax name value)
@@ -286,7 +301,7 @@
              define-transformer)
     (define (build-decl-info gen-name orig-name vstx)
       (with-syntax ([gn gen-name])
-        #`(st:dsignature #'#,gen-name #,vstx)))
+        #`(ti:decl #'#,gen-name #,vstx)))
     (define (parameterize-constructors
              record-value
              union-value
@@ -333,8 +348,11 @@
     (define (define-value gen-name orig-name sig-stx)
       (build-define-value gen-name (value orig-name sig-stx)))
     (define (define-transformer gen-name orig-name sig-stx)
-      (build-define-syntax
-       orig-name
-       (build-decl-info gen-name
-                        orig-name
-                        (parameterize-constructors-for-syntax sig-stx))))))
+      #`(begin
+          #,(build-define-syntax
+             orig-name
+             (build-decl-info gen-name
+                              orig-name
+                              (parameterize-constructors-for-syntax sig-stx)))
+          (define-for-syntax #,orig-name (syntax-local-value #'#,orig-name))
+          ))))

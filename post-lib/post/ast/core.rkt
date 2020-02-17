@@ -19,9 +19,14 @@
     (struct rkt signature [check/c coerce])
     (struct function signature [args ret])    ;[(list decl) sig]
     (struct union signature [subtypes])       ;[(list decl)]
-    (struct datatype signature [args])        ;[(list decl)]
+    (struct datatype signature [args])        ;[(list vars)]
     (struct record signature [defs])          ;[(list decl)]
-    (struct forall signature [binds typeb]))  ;[(list decl) sig]
+    (define forall-app-builder
+      (make-keyword-procedure
+       (λ (kws kw-args f . rst)
+         (keyword-apply (forall-appb f) kws kw-args (cons f rst)))))
+    (struct forall signature [binds typeb appb]
+      #:property prop:procedure forall-app-builder))  ;[(list decl) sig]
 
   (module* expr #f
     (provide (except-out (all-defined-out)
