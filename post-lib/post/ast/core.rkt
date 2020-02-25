@@ -34,10 +34,10 @@
                          record-app-builder))
     (define function-app-builder
       (make-keyword-procedure
-       (λ (kws kw-args f . rst) (keyword-apply (function-appb f) kws kw-args rst))))
+       (λ (kws kw-args f . rst) (keyword-apply (function-appb f) kws kw-args (cons f rst)))))
     (define record-app-builder
       (make-keyword-procedure
-       (λ (kws kw-args m . rst) (keyword-apply (record-appb m) kws kw-args rst))))
+       (λ (kws kw-args m . rst) (keyword-apply (record-appb m) kws kw-args (cons m rst)))))
 
     (struct dexpr decl [(md #:mutable)])
     (struct function dexpr [bodyb appb]  #:property prop:procedure function-app-builder)

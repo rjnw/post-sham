@@ -67,8 +67,8 @@
       (define ((default hint) stx) (if stx stx hint))
 
       (parameterize ([atsyntax-function-name (cons maybe-name-stx (atsyntax-function-name))])
-        (with-syntax ([nast (name maybe-name-stx)]
-                      [(arg-names ...) (map name arg-names-stx)]
+        (with-syntax ([nast (name maybe-name-stx 'post-function)]
+                      [(arg-names ...) (map (λ (s) (name s 'post-function-arg)) arg-names-stx)]
                       [(arg-names-temp ...)
                        (map (default #'post-function-arg-name) arg-names-stx)]
                       [(arg-sigs ...) arg-sigs-stx]
@@ -77,7 +77,7 @@
                       [(args-sig-name ret-sig-name)
                        (generate-temporaries `(post-function-args-sig
                                                post-function-ret-sig))]
-                      [(input-name) (generate-temporary 'post-function-input)]
+                      [input-name (generate-temporary 'post-function-input)]
                       [(function-name function-sig-name function-decl-name)
                        (generate-temporaries
                         `(,(if maybe-name-stx maybe-name-stx 'post-function)
@@ -88,29 +88,28 @@
                                                   (syntax->list #`(arg-sigs ...)))]
                         [full-sig #`(cs:function args-sig-name ret-sig-name)]
                         [function-decl (decl #'nast #'function-sig-name)])
-            #`(let* ([arg-names-temp arg-sig-decls]
-                     ...
-                     [args-sig-name (list arg-names-temp ...)]
-                     [ret-sig-name ret-sig]
-                     [function-sig-name full-sig]
-                     [function-decl-name function-decl])
-                (letrec ([function-name
-                          (ce:function
-                           nast
-                           function-sig-name
-                           (λ input-name
-                             (parameterize
-                                 ([rt:current-function
-                                   (cons (cons function-decl-name function-name)
-                                         (rt:current-function))]
-                                  [rt:current-function-input
-                                   (cons (map cons args-sig-name input-name)
-                                         (rt:current-function-input))])
-                               (match-let ([(list arg-names-temp ...)
-                                            (map rt:validate-function-input
-                                                 args-sig-name input-name)])
-                                 #,(bodyb #'body #'ret-sig-name)))))])
-                  #,(k #'function-name #'function-sig-name #'function-decl-name)))))))
+            (define (f x) (pretty-print (syntax->datum x)) x)
+            (f #`(let* ([arg-names-temp arg-sig-decls]
+                      ...
+                      [args-sig-name (list arg-names-temp ...)]
+                      [ret-sig-name ret-sig]
+                      [function-sig-name full-sig]
+                      [function-decl-name function-decl])
+                 (letrec ([function-name
+                           (ce:function
+                            nast
+                            function-sig-name
+                            (λ input-name
+                              (parameterize
+                                  ([rt:current-function
+                                    (cons (cons function-decl-name function-name)
+                                          (rt:current-function))]
+                                   [rt:current-function-input
+                                    (cons (map cons args-sig-name input-name)
+                                          (rt:current-function-input))])
+                                (match-let ([(list arg-names-temp ...) input-name])
+                                  #,@(bodyb #'body #'ret-sig-name)))))])
+                   #,(k #'function-name #'function-sig-name #'function-decl-name))))))))
 
     (define (function name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx)
       (define builder (function-k name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx))
@@ -244,7 +243,22 @@
     (define (lit stx)
       (syntax-parse stx
         [(_ sham:expr check:expr coerce:expr)
-         (ast:lit #`sham #`check #`coerce)]))))
+         (ast:lit #`sham #`check #`coerce)])))
+  (module* expr #f
+    (require (prefix-in ast: (submod ".." ".." ast expr))
+             syntax/parse)
+    (provide (all-defined-out))
+    (define (function stx)
+      (syntax-parse stx
+        [(_ ([inp-args:id (~optional (~datum :)) inp-types:expr] ... (~optional (~datum :)) ret-type:expr)
+            body:expr ...)
+         (ast:function (syntax-local-name)
+                       (syntax->list #`(inp-args ...))
+                       (syntax->list #`(inp-types ...))
+                       #`ret-type
+                       (syntax->list #`(body ...)))]))
+    (define (record stx) #'42)
+    (define (value stx) #'42)))
 
 (module syntax-transformer racket
   (module* signature #f
@@ -286,6 +300,7 @@
            racket/stxparam
            post/parameters/syntax
            (prefix-in vts- (submod ".." value-transformer signature))
+           (prefix-in vte- (submod ".." value-transformer expr))
            (for-syntax (prefix-in sts- (submod ".." syntax-transformer signature)))
            (prefix-in atsyntax- post/parameters/atsyntax)
            (prefix-in ti: (submod post/ast/transformer info))
@@ -354,5 +369,25 @@
              (build-decl-info gen-name
                               orig-name
                               (parameterize-constructors-for-syntax sig-stx)))
-          (define-for-syntax #,orig-name (syntax-local-value #'#,orig-name))
-          ))))
+          (define-for-syntax #,orig-name (syntax-local-value #'#,orig-name)))))
+
+  (module* expr #f
+    (provide expr define-expr)
+    (define (parameterize-constructors-for-value stx)
+      #`(syntax-parameterize
+            ([record vte-record]
+             [function vte-function])
+          #,stx))
+    (define (expr infer-name expr-stx)
+      (parameterize-constructors-for-value expr-stx))
+    (define (define-expr name expr-stx)
+      (build-define-value name (parameterize-constructors-for-value expr-stx)))
+
+    ;; (define (function name inp-args inp-types ret-type bodys)
+    ;;   (ast:function name inp-args inp-types ret-type
+    ;;                 (if (equal? (length bodys) 1)
+    ;;                     (car bodys)
+    ;;                     (block bodys))))
+    ;; (define (define-function name inp-args inp-types ret-type bodys)
+    ;;   #`(define #,name #,(function name inp-args inp-types ret-type bodys)))
+    ))

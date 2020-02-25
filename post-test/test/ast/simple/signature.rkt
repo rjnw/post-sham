@@ -38,3 +38,15 @@
     (pretty-print (pp:sig mtch))
     (pretty-print (pp:sig dbl-md))
     (pretty-print (pp:sig (opt symbol)))))
+
+(module test-prefix racket
+  (require (prefix-in post- post/ast/simple)
+           (prefix-in post- post/parameters/syntax)
+           (prefix-in post- (for-syntax post/parameters/syntax))
+           (prefix-in post- post/ast/rkt))
+  (post-define-signature int post-integer)
+  (post-define-signature fsa
+    (post-record
+     [start post-symbol]
+     [end (post-listof post-symbol)]
+     [transitions (post-listof (post-cons post-symbol (post-listof (post-cons post-symbol post-symbol))))])))

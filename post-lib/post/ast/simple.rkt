@@ -1,26 +1,19 @@
 #lang racket
 
-(require syntax/parse/define
-         racket/stxparam
-         (for-syntax racket/syntax))
+(require syntax/parse/define)
 
-(require (for-syntax (prefix-in ss: (submod "syntax.rkt" ast signature))
-                     (prefix-in se: (submod "syntax.rkt" ast expr))
-                     (prefix-in sds: (submod "syntax.rkt" definers signature))
-                     (prefix-in p: post/parameters/syntax)
-                     racket/pretty)
-         (prefix-in p: post/parameters/syntax)
-         (prefix-in rkt: racket/base))
+(require (for-syntax (prefix-in sds: (submod "syntax.rkt" definers signature))
+                     (prefix-in sde: (submod "syntax.rkt" definers expr))
+                     racket/syntax
+                     ;; (prefix-in p: post/parameters/syntax)
+                     )
+         (prefix-in p: post/parameters/syntax))
 (provide (all-defined-out))
 
-;; (define-syntax-parser function
-;;   [(_ ([inp-args:id (~optional (~datum :)) inp-types:expr] ... (~optional (~datum :)) ret-type:expr)
-;;       body:expr ...)
-;;    (se:functor (syntax-local-name)
-;;                (syntax->list #`(inp-args ...))
-;;                (syntax->list #`(inp-types ...))
-;;                #`ret-type
-;;                (se:begin (ss:signature #f #`ret-type) (syntax->list #`(body ...))))])
+(define-syntax-parser expr
+  [(_ e) (sde:expr (syntax-local-name) #`e)])
+(define-syntax-parser define-expr
+  [(_ n:id e) (sde:define-expr #`n #`e)])
 
 (define-syntax-parser define-signature
   [(_ name:id s:expr)
@@ -36,32 +29,3 @@
                              (syntax-local-name)
                              (generate-temporary #'signature))
                          #`s)])
-
-;; (define-syntax (module stx)
-;;   (syntax-parse stx
-;;     [(_ ([inp:id (~optional (~datum :)) t:expr] ...) sig:expr
-;;         parts:expr ...) #'42]))
-
-;; (define-syntax (val stx)
-;;   (syntax-parse stx
-;;     [(_ name:id v:expr)
-;;      #`(post-add-val-to-current-module name v)]
-;;     [(_ (name:id (inp-args:id (~optional (~datum :)) inp-types:expr) ... (~optional (~datum :)) ret-type:expr)
-;;         body:expr ...)
-;;      #`(post-add-val-to-current-module
-;;         name
-;;         (post-function name (inp-args ...) (-> inp-types ... ret-type)
-;;                        (post-begin body ...)))]))
-
-;; (define-simple-macro (add-val-to-current-module name value)
-;;   (if (not (false? (post-current-module)))
-;;       (post-add-to-module 'name (post-current-module) value)
-;;       (error 'post "using val outside post-module")))
-
-;; (define (add-to-module name mod value)
-;;   (printf "adding ~a to mod ~a\n" name (post-module-name mod)))
-
-(module+ test
-  (require post/parameters/syntax
-           (for-syntax post/parameters/syntax))
-  )

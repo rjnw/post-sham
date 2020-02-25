@@ -8,8 +8,8 @@
 (provide (all-defined-out))
 
 (define current-module-context (make-parameter (make-hash)))
-(define current-functor (make-parameter '()))
-(define current-functor-input (make-parameter '()))
+(define current-function (make-parameter '()))
+(define current-function-input (make-parameter '()))
 (define current-forall-input (make-parameter '()))
 
 (define (check-isof? value type-sig)
