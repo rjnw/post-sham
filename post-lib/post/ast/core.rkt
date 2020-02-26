@@ -14,12 +14,13 @@
   (module* signature #f
     (provide (all-defined-out))
     (struct signature ast [(md #:mutable)])
+    (struct unknown signature [possibles])
     (struct type signature [base])
     (struct lit signature [sham check/c coerce])
     (struct rkt signature [check/c coerce])
     (struct function signature [args ret])    ;[(list decl) sig]
     (struct union signature [subtypes])       ;[(list decl)]
-    (struct datatype signature [args])        ;[(list vars)]
+    (struct datatype signature [ctor args])        ;[(list vars)]
     (struct record signature [defs])          ;[(list decl)]
     (define forall-app-builder
       (make-keyword-procedure

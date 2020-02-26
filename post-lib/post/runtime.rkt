@@ -8,9 +8,21 @@
 (provide (all-defined-out))
 
 (define current-module-context (make-parameter (make-hash)))
-(define current-function (make-parameter '()))
-(define current-function-input (make-parameter '()))
 (define current-forall-input (make-parameter '()))
+
+;; current-function
+(struct function-context [value inputs prev])
+(define current-function-context (make-parameter '()))
+(define (build-function-context value inputs prev)
+  (function-context value inputs prev))
+
+;; current-record
+(struct record-context [value input collector prev])
+(define current-record-context (make-parameter '()))
+(define (build-record-context value input collector prev)
+  (record-context value input collector prev))
+(define (new-record-collector) (make-hash))
+(define (from-record-context rcontexts) #f)
 
 (define (check-isof? value type-sig)
   (unless (isof? value type-sig)
@@ -39,3 +51,14 @@
 
 (define (try-coerce val sig)
   val)
+
+
+
+(define (lookup-type-in-record-context name record-contexts)
+  #f)
+
+(define (with-inferred-type full-sig inferred-sig)
+  full-sig)
+
+(define (add-to-current-record-context value record-contexts)
+  (void))

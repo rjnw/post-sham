@@ -1,393 +1,205 @@
 #lang racket
 
-(module ast racket
-  (require (for-template racket
-                         "core.rkt"
-                         (prefix-in md: (submod "metadata.rkt" _metadata ast)))
-           (prefix-in atsyntax- "../parameters/atsyntax.rkt")
-           syntax/parse
-           racket/syntax)
+(require (for-template
+          racket
+          racket/stxparam
+          post/ast/core
+          (prefix-in cs: (submod "constructor.rkt" signature))
+          (prefix-in ce: (submod "constructor.rkt" expr))
+          (prefix-in p: post/parameters/syntax)
+          (prefix-in rt: post/runtime)
+          (prefix-in md: (submod "metadata.rkt" _metadata ast))
+          (prefix-in mde: (submod "metadata.rkt" _metadata ast expr))
+          (prefix-in mds: (submod "metadata.rkt" _metadata ast signature))))
+(require racket/syntax
+         syntax/parse
+         syntax/stx)
 
+(define (decl name-stx sig-stx) #`(ast:decl #'#,name-stx #,sig-stx))
+(define (orig-name stx) #`(ast:name:orig #'#,stx))
+(define (gen-name stx) #`(ast:name:gen #'#,stx))
+(define (name orig hint) (if orig (orig-name orig) (gen-name (generate-temporary hint))))
+(define (debug-pp stx) (pretty-print (syntax->datum stx)) stx)
+
+(module* expr #f
   (provide (all-defined-out))
-  (define (decl name-stx sig-stx) #`(ast:decl #'#,name-stx #,sig-stx))
-  (define (name orig hint)
-    (if orig
-        #`(ast:name:orig #'#,orig)
-        #`(ast:name:gen #'#,(generate-temporary hint))))
+  (define (expr-function stx)
+    (syntax-parse stx
+      [(_ ([arg-names:id (~optional (~datum :)) arg-sigs:expr] ... (~optional (~datum :)) ret-sig:expr)
+          body:expr ...)
+       (define all-arg-names (syntax->list #`(arg-names ...)))
+       (define all-arg-sigs (syntax->list #`(arg-sigs ...)))
+       (define inferred-name (syntax-local-name))
+       (with-syntax ([nast (name inferred-name 'post-function)]
+                     [(arg-decl-names ...) (stx-map generate-temporary all-arg-names)]
+                     [(args-sig-name ret-sig-name)
+                      (generate-temporaries `(post-function-args-sig
+                                              post-function-ret-sig))]
+                     [input-name (generate-temporary 'post-function-input)]
+                     [infer-type-name (generate-temporary 'post-function-infer-type)]
+                     [name-ast (generate-temporary 'name-ast)]
+                     [(function-name function-sig-name)
+                      (generate-temporaries
+                       (list (if inferred-name inferred-name 'post-function)
+                             'post-function-signature))])
+         (with-syntax ([(arg-sig-decls ...) (map decl all-arg-names all-arg-sigs)]
+                       [full-sig #`(cs:function args-sig-name ret-sig-name)])
+           #`(let* ([arg-decl-names arg-sig-decls]
+                    ...
+                    [name-ast nast]
+                    [infer-type-name (rt:lookup-type-in-record-context name-ast (rt:current-record-context))]
+                    [args-sig-name (list arg-decl-names ...)]
+                    [ret-sig-name ret-sig]
+                    [function-sig-name (rt:with-inferred-type full-sig infer-type-name)])
+               (letrec ([function-name
+                         (ce:function
+                          name-ast
+                          function-sig-name
+                          (λ input-name
+                            (parameterize
+                                ([rt:current-function-context
+                                  (rt:build-function-context function-name
+                                                             (map cons args-sig-name input-name)
+                                                             (rt:current-function-context))])
+                              (match-let ([(list arg-names ...) input-name])
+                                body ...))))])
+                 (rt:add-to-current-record-context function-name (rt:current-record-context))
+                 function-name))))]))
 
-  (module* signature #f
-    (require (for-template (prefix-in cs: (submod "constructor.rkt" signature))
-                           (prefix-in mds: (submod "metadata.rkt" _metadata ast signature))
-                           (prefix-in rt: post/runtime)))
-    (provide (all-defined-out))
-    (define (type (t #f))
-      #`(cs:type #,t))
-    (define (lit st m c)
-      #`(cs:lit #,st #,m #,c))
-    (define (rkt chk coerce)
-      #`(cs:rkt #,chk #,coerce))
-    (define (union ctors subs)
-      #`(cs:union (list #,@(map decl ctors subs))))
-    (define (datatype ctor argns argts)
-      #`(cs:datatype (list #,@(map decl argns argts)) #:md (mds:datatype #f #'#,ctor)))
-    (define record
-      (case-lambda
-        [(def-names def-sigs) #`(cs:record (list #,@(map decl def-names def-sigs)))]
-        [(defs) #`(cs:record defs)]))
-    (define function
-      (case-lambda
-        [(arg-names arg-sigs ret-sig)
-         #`(cs:function (list #,@(map decl arg-names arg-sigs)) #,ret-sig)]
-        [(arg-decls ret-sig) #`(cs:function (list #,@arg-decls) #,ret-sig)]))
-    (define (forall bind-names bind-sigs type-stx)
-      (with-syntax ([(bds ...) (map decl bind-names bind-sigs)]
-                    [binds-decls (generate-temporary 'forall-binds)]
-                    [forall-input (generate-temporary 'forall-input)]
-                    [type type-stx])
-        #`(let ([binds-decls (list bds ...)])
-            (cs:forall binds-decls
-                       (λ forall-input
-                         (match-let
-                             ([(list #,@bind-names)
-                               (map rt:validate-forall-input binds-decls forall-input)])
-                           (parameterize ([rt:current-forall-input
-                                           (cons (map cons binds-decls forall-input)
-                                                 (rt:current-forall-input))])
-                             type))))))))
+  (define (expr-record stx)
+    (syntax-parse stx
+      [(_ sig:expr bodys:expr ...)
+       (define inferred-name (syntax-local-name))
+       (with-syntax
+         ([nast (name inferred-name 'post-record)]
+          [(record-name record-input-context-name record-collector-name)
+           (generate-temporaries (list (if inferred-name inferred-name 'post-record)
+                                       'record-input-context 'record-collector))])
+         #`(letrec ([record-name
+                     (ce:record
+                      nast
+                      sig
+                      (λ (record-input-context-name)
+                        (let ([record-collector-name (rt:new-record-collector)])
+                          (parameterize
+                              ([rt:current-record-context
+                                (rt:build-record-context record-name record-input-context-name
+                                                         record-collector-name (rt:current-record-context))])
+                            (begin
+                              bodys ...
+                              (rt:from-record-context (rt:current-record-context))))))
+                      #:md (mde:record))])
+             record-name))]))
 
-  (module* expr #f
-    (require (for-template (prefix-in cs: (submod "constructor.rkt" signature))
-                           (prefix-in ce: (submod "constructor.rkt" expr))
-                           (prefix-in rt: post/runtime))
-             (prefix-in sig: (submod ".." signature)))
-    (provide (all-defined-out))
+  (define (expr-let stx)
+    (syntax-parse stx
+      [(_ ([vars vals vars-sig] ...) body)
+       (define all-vars #`(vars ...))
+       (define all-vals #`(vals ...))
+       (define all-vars-sig #`(vars-sig ...))
+       (with-syntax ([(let-name var-decls-name) (generate-temporaries `(post-let post-let-var-decls))]
+                     [(var-decls ...) (stx-map decl (stx-map orig-name all-vars) all-vars-sig)])
+         #`(let* ([var-decls-name (list var-decls ...)]
+                  [let-name (ce:let (cs:unknown)
+                                    var-decls-name
+                                    (list vals ...)
+                                    (λ (vars ...) body)
+                                    #:md (mde:let))])
+             let-name))]))
+  (define (expr-value stx)
+    (syntax-parse stx
+      [(_ name:id v:expr)
+       #`v]))
 
-    (define ((function-k maybe-name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx)
-             bodyb k)
-      (define ((default hint) stx) (if stx stx hint))
+  (define (expr-ref dcl-stx)
+    #`(ce:ref (ast:decl-sig #,dcl-stx) #,dcl-stx))
+  (define (expr-lit val-stx maybe-sig-stx)
+    #`(rt:infer-literal #,val-stx #,maybe-sig-stx))
+  (define (expr-app rator-stx rand-stxs)
+    #`(ce:app (rt:functor-return (rt:typeof #,rator-stx))
+              #,rator-stx
+              (list #,@rand-stxs)))
+  (define (parameterize-for-record stx)
+    #`(syntax-parameterize
+          ([p:record expr-record]
+           [p:value expr-value]
+           [p:function expr-function])
+        #,stx))
+  (define (parameterize-for-expr stx)
+    #`(syntax-parameterize
+          ([p:record expr-record]
+           [p:function expr-function])
+        #,stx)))
 
-      (parameterize ([atsyntax-function-name (cons maybe-name-stx (atsyntax-function-name))])
-        (with-syntax ([nast (name maybe-name-stx 'post-function)]
-                      [(arg-names ...) (map (λ (s) (name s 'post-function-arg)) arg-names-stx)]
-                      [(arg-names-temp ...)
-                       (map (default #'post-function-arg-name) arg-names-stx)]
-                      [(arg-sigs ...) arg-sigs-stx]
-                      [ret-sig ret-sig-stx]
-                      [body body-stx]
-                      [(args-sig-name ret-sig-name)
-                       (generate-temporaries `(post-function-args-sig
-                                               post-function-ret-sig))]
-                      [input-name (generate-temporary 'post-function-input)]
-                      [(function-name function-sig-name function-decl-name)
-                       (generate-temporaries
-                        `(,(if maybe-name-stx maybe-name-stx 'post-function)
-                          post-function-signature
-                          post-function-decl))])
-          (with-syntax ([(arg-sig-decls ...) (map decl
-                                                  (syntax->list #`(arg-names ...))
-                                                  (syntax->list #`(arg-sigs ...)))]
-                        [full-sig #`(cs:function args-sig-name ret-sig-name)]
-                        [function-decl (decl #'nast #'function-sig-name)])
-            (define (f x) (pretty-print (syntax->datum x)) x)
-            (f #`(let* ([arg-names-temp arg-sig-decls]
-                      ...
-                      [args-sig-name (list arg-names-temp ...)]
-                      [ret-sig-name ret-sig]
-                      [function-sig-name full-sig]
-                      [function-decl-name function-decl])
-                 (letrec ([function-name
-                           (ce:function
-                            nast
-                            function-sig-name
-                            (λ input-name
-                              (parameterize
-                                  ([rt:current-function
-                                    (cons (cons function-decl-name function-name)
-                                          (rt:current-function))]
-                                   [rt:current-function-input
-                                    (cons (map cons args-sig-name input-name)
-                                          (rt:current-function-input))])
-                                (match-let ([(list arg-names-temp ...) input-name])
-                                  #,@(bodyb #'body #'ret-sig-name)))))])
-                   #,(k #'function-name #'function-sig-name #'function-decl-name))))))))
+;; signatures
+(module* signature #f
+  (provide (all-defined-out))
+  (define (sig-record stx)
+    (syntax-parse stx
+      [(_ [def:id s:expr] ...)
+       #:with (decls ...) (stx-map decl (stx-map orig-name #`(def ...)) #`(s ...))
+       #`(cs:record (list decls ...))]))
+  (define (sig-union stx)
+    (syntax-parse stx
+      [(_ (c:id ts:expr ...) ...)
+       #:with (decls ...) (stx-map decl
+                                   (stx-map orig-name #`(c ...))
+                                   (stx-map (λ (c t) #`(p:datatype c #,t))
+                                            #`(c ...)
+                                            #`((ts ...) ...)))
+       #`(cs:union (list decls ...))]))
+  (define (sig-datatype stx)
+    (syntax-parse stx
+      [(_ c:id [t:expr ...])
+       #:with (tdecls ...) (stx-map decl (stx-map (const #f) #`(t ...)) #`(t ...))
+       #`(cs:datatype #,(orig-name #'c) (list tdecls ...)
+                      #:md (mds:datatype #f #'c))]))
+  (define (sig-forall stx)
+    (syntax-parse stx
+      [(_ [v:id ...] t:expr)
+       (define all-vs #`(v ...))
+       (with-syntax ([(bds ...) (stx-map decl
+                                     (stx-map orig-name all-vs)
+                                     (stx-map (const #`(cs:type #f)) all-vs))])
+         #`(cs:forall (list bds ...) (λ (v ...) t)))]))
+  (define (sig-function stx)
+    (syntax-parse stx
+      [(_ [v:id vt:expr] ... ret:expr)
+       #:with (arg-decls ...) (stx-map decl (stx-map orig-name #`(v ...)) #`(vt ...))
+       #`(cs:function (list arg-decls ...) ret)]))
 
-    (define (function name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx)
-      (define builder (function-k name-stx arg-names-stx arg-sigs-stx ret-sig-stx body-stx))
-      (builder (λ (a b) a) (λ (a b c) a)))
+  (define (sig-rkt stx)
+    (syntax-parse stx
+      [(_ chk:expr coerce:expr) #`(cs:rkt chk coerce)]))
+  (define (sig-lit stx)
+    (syntax-parse stx
+      [(_ sham:expr check:expr coerce:expr)
+       #`(cs:lit sham check coerce)]))
+  (define (parameterize-for-signature stx)
+    #`(syntax-parameterize
+          ([p:record sig-record]
+           [p:function sig-function]
+           [p:union sig-union]
+           [p:datatype sig-datatype]
+           [p:forall sig-forall]
+           [p:rkt sig-rkt]
+           [p:lit sig-lit])
+        #,stx)))
 
-    (define ((record-k maybe-name-stx sig-stx body-stxs) bodyb k)
-      (parameterize ([atsyntax-record-name (cons maybe-name-stx (atsyntax-record-name))])
-        (with-syntax
-          ([nast (name maybe-name-stx)]
-           [(record-name record-input-context-name record-sig-name record-decl-name)
-            (generate-temporaries `(,(if maybe-name-stx maybe-name-stx 'post-record)
-                                    record-input-context record-signature record-decl))]
-           [record-sig sig-stx])
-          (with-syntax
-            ([record-decl (decl #'nast #'record-sig-name)])
-            (parameterize
-                ([atsyntax-context-name
-                  (cons #'record-input-context-name (atsyntax-context-name))]
-                 [atsyntax-record-local-name
-                  (cons #'record-name (atsyntax-record-local-name))])
-              #`(let* ([record-sig-name record-sig]
-                       [record-decl-name record-decl])
-                  (letrec ([record-name
-                            (ce:record
-                             nast
-                             record-sig-name
-                             (λ (record-input-context-name)
-                               (parameterize
-                                   ([rt:current-record
-                                     (cons (cons record-decl-name record-name)
-                                           (rt:current-record))]
-                                    [rt:current-record-input-context
-                                     (cons record-input-context-name
-                                           (rt:current-record-input-context))]
-                                    [rt:current-record-collector
-                                     (rt:new-record-collector)])
-                                 (begin
-                                   #,@(bodyb
-                                       body-stxs
-                                       #'record-sig-name
-                                       #'record-input-context-name)
-                                   (rt:check-valid-record-collected
-                                    (rt:current-record-collector)
-                                    record-sig-name)
-                                   (rt:current-record-collector))))
-                             #:md (mde:record))])
-                    #,(k #'record-name #'record-sig-name #'record-decl-name))))))))
-    (define (record name-stx sig-stx body-stxs)
-      (define builder (record-k name-stx sig-stx body-stxs))
-      (builder (λ (a b) a) (λ (a b c) a)))
 
-    (define ((let-k sig-stx var-stxs var-sig-stxs val-stxs body-stxs) bodyb k)
-      (with-syntax
-        ([(let-name let-input-name let-sig-name var-decls-name)
-          (generate-temporaries
-           `(post-let post-let-input post-let-signature post-let-var-decls))]
-         [(vars ...) var-stxs]
-         [(vals ...) val-stxs]
-         [(var-decls ...) (map decl (map name var-stxs) var-sig-stxs)]
-         [sig sig-stx])
-        (parameterize ([atsyntax-let-vars (cons var-stxs (atsyntax-let-vars))])
-          #`(let* ([var-decls-name (list var-decls ...)]
-                   [let-sig-name sig]
-                   [let-name
-                    (ce:let
-                     let-sig-name
-                     var-decls-name
-                     (list vals ...)
-                     (λ let-input-name
-                       (match-let ([(list vars ...)
-                                    (map rt:validate-let-input
-                                         var-decls-name
-                                         let-input-name)])
-                         #,(bodyb body-stxs #'let-sig-name)))
-                     #:md (mde:let))])
-              #,(k #'let-name #'let-sig-name)))))
-    (define (let sig-stx var-stxs var-sig-stxs val-stxs body-stxs)
-      (define builder (let-k sig-stx var-stxs var-sig-stxs val-stxs body-stxs))
-      (builder (λ (a b) a) (λ (a b) a)))
 
-    (define (ref dcl-stx)
-      #`(ce:ref (ast:decl-sig #,dcl-stx) #,dcl-stx))
-    (define (lit val-stx maybe-sig-stx)
-      #`(rt:infer-literal #,val-stx #,maybe-sig-stx))
-    (define (app rator-stx rand-stxs)
-      #`(ce:app (rt:functor-return (rt:typeof #,rator-stx))
-                #,rator-stx
-                (list #,@rand-stxs)))))
+(module* definers #f
+  (require (submod ".." expr)
+           (submod ".." signature))
+  (provide signature define-signature
+           expr define-expr)
 
-(module value-transformer racket
-  (module* signature #f
-    (require (prefix-in ast: (submod ".." ".." ast signature))
-             (prefix-in p: (for-template post/parameters/syntax))
-             syntax/parse)
-    (provide (all-defined-out))
-    (define (record stx)
-      (syntax-parse stx
-        [(_ [def:id s:expr] ...)
-         (ast:record (syntax->list #`(def ...)) (syntax->list #`(s ...)))]))
-    (define (union stx)
-      (syntax-parse stx
-        [(_ (c:id ts:expr ...) ...)
-         (ast:union
-          (syntax->list #`(c ...))
-          (map (λ (c t) #`(p:datatype c #,t))
-               (syntax->list #`(c ...))
-               (syntax->list #`((ts ...) ...))))]))
-    (define (datatype stx)
-      (syntax-parse stx
-        [(_ c:id [v:id ...])
-         (ast:datatype #'c
-                       (map (const #f) (syntax->list #`(v ...)))
-                       (syntax->list #`(v ...)))]))
-    (define (forall stx)
-      (syntax-parse stx
-        [(_ [v:id ...] t:expr)
-         (ast:forall (syntax->list #`(v ...))
-                     (map (const (ast:type))
-                          (syntax->list #`(v ...)))
-                     #'t)]))
-    (define (function stx)
-      (syntax-parse stx
-        [(_ [v:id vt:expr] ... ret:expr)
-         (ast:function (syntax->list #`(v ...))
-                       (syntax->list #`(vt ...))
-                       #`ret)]))
-    (define (rkt stx)
-      (syntax-parse stx
-        [(_ chk:expr coerce:expr)
-         (ast:rkt #`chk #`coerce)]))
-    (define (lit stx)
-      (syntax-parse stx
-        [(_ sham:expr check:expr coerce:expr)
-         (ast:lit #`sham #`check #`coerce)])))
-  (module* expr #f
-    (require (prefix-in ast: (submod ".." ".." ast expr))
-             syntax/parse)
-    (provide (all-defined-out))
-    (define (function stx)
-      (syntax-parse stx
-        [(_ ([inp-args:id (~optional (~datum :)) inp-types:expr] ... (~optional (~datum :)) ret-type:expr)
-            body:expr ...)
-         (ast:function (syntax-local-name)
-                       (syntax->list #`(inp-args ...))
-                       (syntax->list #`(inp-types ...))
-                       #`ret-type
-                       (syntax->list #`(body ...)))]))
-    (define (record stx) #'42)
-    (define (value stx) #'42)))
+  (define (signature infer-name sig-stx)
+    (parameterize-for-signature sig-stx))
+  (define (define-signature gen-name orig-name sig-stx)
+    #`(define #,gen-name #,(signature orig-name sig-stx)))
 
-(module syntax-transformer racket
-  (module* signature #f
-    (provide (all-defined-out))
-    (require (for-template racket)
-             syntax/parse
-             (for-template (prefix-in t: (submod "transformer.rkt" info signature))
-                           (prefix-in p: post/parameters/syntax)))
-    (define (record stx)
-      (syntax-parse stx
-        [(_ (c:id t:expr) ...)
-         #`(t:record (list #'c ...) (list t ...))]))
-    (define (union stx)
-      (syntax-parse stx
-        [(_ (c:id ts:expr ...) ...)
-         #`(t:union (list #'c ...)
-                    (list #,@(map (λ (c t) #`(p:datatype #,c #,t))
-                                  (syntax->list #`(c ...))
-                                  (syntax->list #`((ts ...) ...)))))]))
-    (define (datatype stx)
-      (syntax-parse stx
-        [(_ c:id [v:id ...])
-         #`(t:datatype #'c #'(v ...))]))
-    (define (forall stx)
-      (syntax-parse stx
-        [(_ [v:id ...] t:expr)
-         #`(t:forall (list #'v ...) t)]))
-    (define (function stx)
-      (syntax-parse stx
-        [(_ [v:id vt:expr] ... ret:expr)
-         #`(t:function (list #'v ...) (list vt ...) ret)]))
-    (define (rkt stx) #`(t:rkt))
-    (define (lit stx) #`(t:lit))))
-
-(module definers racket
-  (require (for-template (except-in racket ->)
-                         racket/stxparam
-                         post/parameters/syntax)
-           racket/stxparam
-           post/parameters/syntax
-           (prefix-in vts- (submod ".." value-transformer signature))
-           (prefix-in vte- (submod ".." value-transformer expr))
-           (for-syntax (prefix-in sts- (submod ".." syntax-transformer signature)))
-           (prefix-in atsyntax- post/parameters/atsyntax)
-           (prefix-in ti: (submod post/ast/transformer info))
-           (prefix-in tis: (submod post/ast/transformer info signature)))
-  (define (build-define-value name value)
-    #`(define #,name #,value))
-  (define (build-define-syntax name value)
-    #`(define-syntax #,name #,value))
-
-  (module* signature #f
-    (provide value
-             define-value
-             define-transformer)
-    (define (build-decl-info gen-name orig-name vstx)
-      (with-syntax ([gn gen-name])
-        #`(ti:decl #'#,gen-name #,vstx)))
-    (define (parameterize-constructors
-             record-value
-             union-value
-             datatype-value
-             forall-value
-             function-value
-             rkt-value
-             lit-value
-             stx)
-      #`(syntax-parameterize
-            ([record #,record-value]
-             [union #,union-value]
-             [datatype #,datatype-value]
-             [forall #,forall-value]
-             [function #,function-value]
-             [rkt #,rkt-value]
-             [lit #,lit-value])
-          #,stx))
-
-    (define (parameterize-constructors-for-value sig-stx)
-      (parameterize-constructors
-       #`vts-record
-       #`vts-union
-       #`vts-datatype
-       #`vts-forall
-       #`vts-function
-       #`vts-rkt
-       #`vts-lit
-       sig-stx))
-
-    (define (parameterize-constructors-for-syntax sig-stx)
-      (parameterize-constructors
-       #`sts-record
-       #`sts-union
-       #`sts-datatype
-       #`sts-forall
-       #`sts-function
-       #`sts-rkt
-       #`sts-lit
-       sig-stx))
-
-    (define (value infer-name sig-stx)
-      (parameterize-constructors-for-value sig-stx))
-    (define (define-value gen-name orig-name sig-stx)
-      (build-define-value gen-name (value orig-name sig-stx)))
-    (define (define-transformer gen-name orig-name sig-stx)
-      #`(begin
-          #,(build-define-syntax
-             orig-name
-             (build-decl-info gen-name
-                              orig-name
-                              (parameterize-constructors-for-syntax sig-stx)))
-          (define-for-syntax #,orig-name (syntax-local-value #'#,orig-name)))))
-
-  (module* expr #f
-    (provide expr define-expr)
-    (define (parameterize-constructors-for-value stx)
-      #`(syntax-parameterize
-            ([record vte-record]
-             [function vte-function])
-          #,stx))
-    (define (expr infer-name expr-stx)
-      (parameterize-constructors-for-value expr-stx))
-    (define (define-expr name expr-stx)
-      (build-define-value name (parameterize-constructors-for-value expr-stx)))
-
-    ;; (define (function name inp-args inp-types ret-type bodys)
-    ;;   (ast:function name inp-args inp-types ret-type
-    ;;                 (if (equal? (length bodys) 1)
-    ;;                     (car bodys)
-    ;;                     (block bodys))))
-    ;; (define (define-function name inp-args inp-types ret-type bodys)
-    ;;   #`(define #,name #,(function name inp-args inp-types ret-type bodys)))
-    ))
+  (define (expr infer-name expr-stx)
+    (parameterize-for-expr expr-stx))
+  (define (define-expr name expr-stx)
+    #`(define #,name #,(parameterize-for-expr expr-stx))))

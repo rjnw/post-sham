@@ -36,9 +36,9 @@
   [(vectorof a) (rkt:vectorof (/c a))]
   [(vector as) (apply vector/c (map /c as))])
 
-(module+ test
-  (require "pp.rkt")
-  (pp:sig boolean)
-  (pp:sig listof)
-  #;(define-signature r (record [transitions (cons symbol symbol)]))
-  )
+;; (module+ test
+;;   (require "pp.rkt")
+;;   (pp:sig boolean)
+;;   (pp:sig listof)
+;;   #;(define-signature r (record [transitions (cons symbol symbol)]))
+;;   )

@@ -13,7 +13,7 @@
   (define debug-metadata (make-parameter #f))
   (define (decl d)
     (match d
-      [(a:decl n s) `(d ,(name n) ,(sig s))]
+      [(a:decl n s) `($ ,(name n) ,(sig s))]
       [else `(decl:unknown ,d)]))
 
   (define (name n)
@@ -21,6 +21,7 @@
       [(n:orig s) `(n:orig ,s)]
       [(n:gen s) `(n:gen ,s)]
       [(? syntax?) (syntax->datum n)]
+      [(? false?) '_]
       [else n]))
   (define (sig s)
     (match s
@@ -30,7 +31,7 @@
       [(s:lit md sham check coerce) `(sig:lit )]
       [(s:rkt md check coerce) `(sig:rkt )]
       [(s:union md subtypes) `(sig:union ,(map decl subtypes))]
-      [(s:datatype md args) `(sig:datatype ,(map decl args))]
+      [(s:datatype md ctor args) `(sig:datatype ,(map decl args))]
       [(s:forall md binds typeb appb) `(sig:forall ,(map decl binds))]
       [(s:signature m) `(sig:unknown-signature ,(md m))]
       [else `(sig:unknown ,s)]))

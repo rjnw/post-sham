@@ -15,11 +15,13 @@
 (define generic-function
   (make-keyword-procedure
    (λ (kws kw-args f . rst)
-     (begin
-       (match-let* ([(ast:expr:function name sig md bodyb _) f]
+     (match-let* ([(ast:expr:function name sig md bodyb _) f]
                     [(ast:signature:function s-md arg-decls ret-sig) sig])
-         (printf "app-builder function: ~a\n" rst)
-         (apply bodyb rst))))))
+         ((runtime-type-checker)
+          ((runtime-eval) (apply bodyb
+                                 (map (runtime-type-checker) rst (map ast:decl-sig arg-decls)))
+                          (runtime-eval-environment))
+          ret-sig)))))
 
 (define generic-record
   (make-keyword-procedure
