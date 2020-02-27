@@ -9,5 +9,4 @@
 (module+ test
   (require rackunit)
   (define f (expr (function ([a integer] [b integer] integer) a)))
-  ;; (printf "interpted-value: ~a\n" (interpret (f 42 23)))
-  )
+  (printf "interpted-value: ~a\n" (pp:expr (interpret (f 42 23)))))

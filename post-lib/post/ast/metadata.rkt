@@ -21,7 +21,7 @@
       (provide (all-defined-out))
       (struct expr [])
       (struct function expr [])
-      (struct record expr [])
+      (struct record expr [memo])
       (struct app expr []))))
 
 (require (prefix-in metadata:ast: (submod "." _metadata ast))

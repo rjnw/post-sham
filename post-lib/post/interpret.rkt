@@ -3,6 +3,8 @@
 (require (prefix-in a: (submod post/ast/core ast))
          (prefix-in s: (submod post/ast/core ast signature))
          (prefix-in e: (submod post/ast/core ast expr))
+         (prefix-in ex: (submod post/ast/core ast expr expanded))
+         post/ast/pp
          post/runtime
          post/parameters/interpreter
          post/parameters/runtime
@@ -13,6 +15,7 @@
   (let ([env (basic-interpreter-environment)])
     (parameterize ([interpreting? #t]
                    [runtime-eval basic-interpreter]
+                   [runtime-app interpret-application]
                    [runtime-eval-literal interpret-literal]
                    [runtime-eval-rkt interpret-rkt]
                    [runtime-eval-environment env]
@@ -33,20 +36,19 @@
                      (map tc args (map a:decl-sig arg-decls)))
               env)
           ret-sig))]
-      #;[(e:record name sig md defb appb) ...]
+      [(e:record name sig md defb appb) (instantiate-record pe)]
       [(e:let sig vars vals bodyb)
        (tc
         (be (bodyb (map tc
                         (map (curryr be env) vals)
                         (map a:decl-sig vars))))
         sig)]
-      [(e:rkt sig value)
-       ((runtime-eval-rkt) value sig env)]
-      [(e:lit sig value)
-       ((runtime-eval-literal) value sig env)]
+      [(e:rkt sig value) pe]
+      [(e:lit sig value) pe]
       [(e:app sig md rator rands)
        (tc (apply (ev rator env) rands) sig)]
-      [else (error 'grack:interpreter:todo "pe:~a" pe)]))
+      [(? ex:record?) pe]
+      [else (error 'post:interpreter:todo "pe:~a" pe)]))
   (be pe env))
 
 (define (basic-interpreter-environment) (make-hash))
@@ -59,6 +61,19 @@
 
 (define (interpret-literal value sig env) value)
 (define (interpret-rkt value sig env) value)
-(define (check-type v sig) v)
+(define interpret-application
+  (make-keyword-procedure
+   (λ (kws kw-args f . args)
+     (define (to-rkt-value val)
+       (if (e:rkt? val)
+           (e:rkt-value val)
+           val))
+     (printf "interpreting application ~a ~a ~a\n" kw-args f args)
+     (if (procedure? f)
+         (keyword-apply f kws (map to-rkt-value kw-args) (map to-rkt-value args))
+         (keyword-apply f kws kw-args args)))))
+(define (check-type v sig)
+  (printf "check-type: ~a, ~a\n" v (pp:sig sig))
+  (of-type v sig))
 
 (define (build-interpreter-context mod-context) mod-context)

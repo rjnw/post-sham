@@ -7,6 +7,7 @@
           (prefix-in cs: (submod "constructor.rkt" signature))
           (prefix-in ce: (submod "constructor.rkt" expr))
           (prefix-in p: post/parameters/syntax)
+          (prefix-in pr: post/parameters/runtime)
           (prefix-in rt: post/runtime)
           (prefix-in md: (submod "metadata.rkt" _metadata ast))
           (prefix-in mde: (submod "metadata.rkt" _metadata ast expr))
@@ -15,7 +16,7 @@
          syntax/parse
          syntax/stx)
 
-(define (decl name-stx sig-stx) #`(ast:decl #'#,name-stx #,sig-stx))
+(define (decl name-stx sig-stx) #`(ast:decl #,name-stx #,sig-stx))
 (define (orig-name stx) #`(ast:name:orig #'#,stx))
 (define (gen-name stx) #`(ast:name:gen #'#,stx))
 (define (name orig hint) (if orig (orig-name orig) (gen-name (generate-temporary hint))))
@@ -23,6 +24,7 @@
 
 (module* expr #f
   (provide (all-defined-out))
+
   (define (expr-function stx)
     (syntax-parse stx
       [(_ ([arg-names:id (~optional (~datum :)) arg-sigs:expr] ... (~optional (~datum :)) ret-sig:expr)
@@ -42,12 +44,12 @@
                       (generate-temporaries
                        (list (if inferred-name inferred-name 'post-function)
                              'post-function-signature))])
-         (with-syntax ([(arg-sig-decls ...) (map decl all-arg-names all-arg-sigs)]
+         (with-syntax ([(arg-sig-decls ...) (map decl (map orig-name all-arg-names) all-arg-sigs)]
                        [full-sig #`(cs:function args-sig-name ret-sig-name)])
            #`(let* ([arg-decl-names arg-sig-decls]
                     ...
                     [name-ast nast]
-                    [infer-type-name (rt:lookup-type-in-record-context name-ast (rt:current-record-context))]
+                    [infer-type-name (rt:lookup-type-in-current-record-context name-ast)]
                     [args-sig-name (list arg-decl-names ...)]
                     [ret-sig-name ret-sig]
                     [function-sig-name (rt:with-inferred-type full-sig infer-type-name)])
@@ -63,33 +65,42 @@
                                                              (rt:current-function-context))])
                               (match-let ([(list arg-names ...) input-name])
                                 body ...))))])
-                 (rt:add-to-current-record-context function-name (rt:current-record-context))
+                 (rt:add-to-current-record-context! name-ast function-name)
                  function-name))))]))
 
   (define (expr-record stx)
+    (define (override-app st)
+      (define app-trans-value #`(λ (stx)
+                                  (syntax-parse stx
+                                    [(_ proc2 args2 (... ...))
+                                     #`(#%app (pr:runtime-app) proc2 args2 (... ...))])))
+      (with-syntax ([app-trans (datum->syntax stx '#%app)])
+        (list* #`(define-syntax app-trans #,app-trans-value)
+               (syntax->list st))))
     (syntax-parse stx
-      [(_ sig:expr bodys:expr ...)
+      [(_ (~optional sig:id) bodys:expr ...)
        (define inferred-name (syntax-local-name))
        (with-syntax
          ([nast (name inferred-name 'post-record)]
           [(record-name record-input-context-name record-collector-name)
            (generate-temporaries (list (if inferred-name inferred-name 'post-record)
                                        'record-input-context 'record-collector))])
-         #`(letrec ([record-name
-                     (ce:record
-                      nast
-                      sig
-                      (λ (record-input-context-name)
-                        (let ([record-collector-name (rt:new-record-collector)])
-                          (parameterize
-                              ([rt:current-record-context
-                                (rt:build-record-context record-name record-input-context-name
-                                                         record-collector-name (rt:current-record-context))])
-                            (begin
-                              bodys ...
-                              (rt:from-record-context (rt:current-record-context))))))
-                      #:md (mde:record))])
-             record-name))]))
+         (debug-pp #`(letrec ([record-name
+                      (ce:record
+                       nast
+                       (~? sig (rt:lookup-type-in-current-function-context))
+                       (λ (record-input-context-name)
+                         (let ([record-collector-name (rt:new-record-collector)])
+                           (parameterize
+                               ([rt:current-record-context
+                                 (rt:build-record-context record-name record-input-context-name
+                                                          record-collector-name (rt:current-record-context))])
+                             (begin
+                               #,(parameterize-for-record
+                                  #`(begin #,@(override-app #`(bodys ...))))
+                               (rt:from-current-record-context)))))
+                       #:md (mde:record (make-hash)))])
+              record-name)))]))
 
   (define (expr-let stx)
     (syntax-parse stx
@@ -108,8 +119,10 @@
              let-name))]))
   (define (expr-value stx)
     (syntax-parse stx
-      [(_ name:id v:expr)
-       #`v]))
+      [(_ n:id v:expr (~optional (~datum :)) (~optional typ:expr))
+       (with-syntax ([nast (name #'n 'post-value)])
+         #`(begin (define n (rt:of-type v (~? typ (rt:lookup-type-in-current-record-context nast))))
+                  (rt:add-to-current-record-context! nast n)))]))
 
   (define (expr-ref dcl-stx)
     #`(ce:ref (ast:decl-sig #,dcl-stx) #,dcl-stx))

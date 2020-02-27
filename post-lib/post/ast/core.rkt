@@ -43,7 +43,19 @@
     (struct dexpr decl [(md #:mutable)])
     (struct function dexpr [bodyb appb]  #:property prop:procedure function-app-builder)
     (struct record dexpr [defb appb]      #:property prop:procedure record-app-builder)
-
+    (module* expanded #f
+      (provide (except-out (all-defined-out)
+                           function-app-builder
+                           record-app-builder))
+      (define function-app-builder
+        (make-keyword-procedure
+         (λ (kws kw-args f . rst) (keyword-apply (function-appb f) kws kw-args (cons f rst)))))
+      (define record-app-builder
+        (make-keyword-procedure
+         (λ (kws kw-args m . rst) (keyword-apply (record-appb m) kws kw-args (cons m rst)))))
+      (struct expanded [orig])
+      (struct record expanded [collector-context appb] #:property prop:procedure record-app-builder)
+      (struct function expanded [origin-record sham appb] #:property prop:procedure function-app-builder))
 
     (struct expr ast [(sig #:mutable)])
     (struct type expr [])
@@ -68,10 +80,12 @@
          (prefix-in ast:name: (submod "." ast name))
          (prefix-in ast:signature: (submod "." ast signature))
          (prefix-in ast:expr: (submod "." ast expr))
+         (prefix-in ast:expr:ex: (submod "." ast expr expanded))
          (prefix-in ast:pat: (submod "." ast pat)))
 
 (provide (all-from-out (submod "." ast))
          (all-from-out (submod "." ast name))
          (all-from-out (submod "." ast signature))
          (all-from-out (submod "." ast expr))
+         (all-from-out (submod "." ast expr expanded))
          (all-from-out (submod "." ast pat)))

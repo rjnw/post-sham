@@ -5,6 +5,7 @@
            (prefix-in n: (submod "core.rkt" ast name))
            (prefix-in s: (submod "core.rkt" ast signature))
            (prefix-in e: (submod "core.rkt" ast expr))
+           (prefix-in ex: (submod "core.rkt" ast expr expanded))
 
            (prefix-in ma: (submod "metadata.rkt" _metadata ast))
            (prefix-in ms: (submod "metadata.rkt" _metadata ast signature))
@@ -56,6 +57,8 @@
       [(e:case s test branches)
        `(expr:case ,(sig)
                    ,(expr test) 'todo:pat)]
+      [(ex:record orig collector appb) `(ex:rec ,(expr orig) ,collector)]
+      [(ex:function orig rec sham appb) `(ex:func ,(expr orig))]
       [else `(expr:unknown ,e)]))
 
   (define (md m)
