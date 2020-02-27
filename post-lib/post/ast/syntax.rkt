@@ -82,25 +82,25 @@
        (define inferred-name (syntax-local-name))
        (with-syntax
          ([nast (name inferred-name 'post-record)]
-          [(record-name record-input-context-name record-collector-name)
+          [(record-name record-input-namespace-name record-collector-name)
            (generate-temporaries (list (if inferred-name inferred-name 'post-record)
-                                       'record-input-context 'record-collector))])
-         (debug-pp #`(letrec ([record-name
-                      (ce:record
-                       nast
-                       (~? sig (rt:lookup-type-in-current-function-context))
-                       (λ (record-input-context-name)
-                         (let ([record-collector-name (rt:new-record-collector)])
-                           (parameterize
-                               ([rt:current-record-context
-                                 (rt:build-record-context record-name record-input-context-name
-                                                          record-collector-name (rt:current-record-context))])
-                             (begin
-                               #,(parameterize-for-record
-                                  #`(begin #,@(override-app #`(bodys ...))))
-                               (rt:from-current-record-context)))))
-                       #:md (mde:record (make-hash)))])
-              record-name)))]))
+                                       'record-input-namespace 'record-collector))])
+         #`(letrec ([record-name
+                     (ce:record
+                      nast
+                      (~? sig (rt:lookup-type-in-current-function-context))
+                      (λ (record-input-namespace-name)
+                        (let ([record-collector-name (rt:new-record-collector)])
+                          (parameterize
+                              ([rt:current-record-context
+                                (rt:build-record-context record-name record-input-namespace-name
+                                                         record-collector-name (rt:current-record-context))])
+                            (begin
+                              #,(parameterize-for-record
+                                 #`(begin #,@(override-app #`(bodys ...))))
+                              (rt:from-current-record-context)))))
+                      #:md (mde:record (make-hash) (make-hash)))])
+             record-name))]))
 
   (define (expr-let stx)
     (syntax-parse stx
@@ -122,7 +122,10 @@
       [(_ n:id v:expr (~optional (~datum :)) (~optional typ:expr))
        (with-syntax ([nast (name #'n 'post-value)])
          #`(begin (define n (rt:of-type v (~? typ (rt:lookup-type-in-current-record-context nast))))
-                  (rt:add-to-current-record-context! nast n)))]))
+                  (rt:add-to-current-record-context! nast n)))]
+      [(_ (f:id [arg-names:id (~optional (~datum :)) arg-sigs:expr] ... (~optional (~datum :)) ret-sig:expr) body:expr ...)
+       #`(p:value f (p:function ((arg-names : arg-sigs) ... : reg-sig)
+                                body ...))]))
 
   (define (expr-ref dcl-stx)
     #`(ce:ref (ast:decl-sig #,dcl-stx) #,dcl-stx))

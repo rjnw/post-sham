@@ -13,18 +13,17 @@
   [(_ i:id chk:expr coerce:expr)
    #`(define-signature i (rkt chk coerce))]
   [(_ i:id chk:expr)
-   #`(define-signature i (rkt chk identity))]
+   #`(define-rkt-type i chk identity)]
   [(_ (i:id v:id ...) chk:expr coerce:expr)
    #`(define-signature i (forall [v ...] (rkt chk coerce)))]
   [(_ (i:id v:id ...) chk:expr)
-   #`(define-signature i (forall [v ...] (rkt chk identity)))])
+   #`(define-rkt-type (i v ...) chk identity)])
 
 (define-syntax-parser define-rkt-types
   [(_ (t:expr c:expr) ...)
    #`(begin (define-rkt-type t c) ...)])
 
-(define (/c t)
-  (ast:signature:rkt-check/c t))
+(define (/c t) (ast:signature:rkt-check/c t))
 (define-rkt-types
   [boolean boolean?]
   [integer integer?]

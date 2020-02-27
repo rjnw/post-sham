@@ -9,13 +9,13 @@
          (prefix-in cs: (submod "ast/constructor.rkt" signature)))
 (provide (all-defined-out))
 
-(define #%global-module-context (make-hash))
-(define current-module-context (make-parameter #%global-module-context))
+(define #%global-record-namespace (make-hash))
+(define current-record-namespace (make-parameter #%global-record-namespace))
 (define current-forall-input (make-parameter '()))
 
 ;; current-record
 (struct record-context [value input collector prev])
-(define #%global-record-context (record-context #f #%global-module-context (make-hash) #f))
+(define #%global-record-context (record-context #f #%global-record-namespace (make-hash) #f))
 (define current-record-context (make-parameter #%global-record-context))
 (define (build-record-context value input collector prev)
   (record-context value input collector prev))
@@ -24,23 +24,10 @@
 (define (from-current-record-context)
   (from-record-context (current-record-context)))
 
-(define (check-isof? value type-sig)
-  (unless (isof? value type-sig)
-    (error 'post:runtime:typecheck "failed isof? test: ~a, ~a" (pp:expr value) (pp:sig type-sig)))
-  value)
 (define (isof? value type-sig)
   (match value
     [(? ast:expr:expr?) (equal? (ast:expr:expr-sig value) type-sig)]
     [else #f]))
-
-(define (infer-literal value sig)
-  (define (check value sig)
-    (if (isof? value sig)
-        value
-        (error 'post:literal:type "literal does not match given type: ~a, ~a" (pp:expr value) (pp:sig sig))))
-  (if (wf:signature? sig)
-      (ce:lit sig (check value sig))
-      (error 'post:literal:infertype "not able to infer type for literal: ~a" value)))
 
 (define (try-coerce val sig)
   (match* (val sig)
@@ -50,8 +37,6 @@
     [((? ast:expr:ex:expanded?) (? ast:signature:signature?))
      #:when (equal? (ast:decl-sig (ast:expr:ex:expanded-orig val)) sig) val]
     [(v s) (error 'post:runtime:coerce "error coercing TODO expr:\n~a\n sig:\n~a\n" (pp:expr val) (pp:sig sig))]))
-
-
 
 ;; return signature for name if found in record context o/w #f
 (define (lookup-type-in-record-context name rc)
@@ -100,9 +85,9 @@
     [(try-coerce value type)]
     [else (error 'post:runtime:typecheck "failed typechecking ~a for ~a" value (pp:sig type))]))
 
-(define (instantiate-record rec (mc (current-module-context)))
+(define (expand-record rec (ns (current-record-namespace)))
   (match-define (ast:expr:record rec-name rec-sig md defb appb) rec)
-  (match-define (metadata:ast:expr:record memo) md)
+  (match-define (metadata:ast:expr:record memo _) md)
   (define (lookup-collected sym collected)
     (define (equal-name-symbol? n sym)
       (match n
@@ -120,11 +105,11 @@
          [(list (and s (? symbol?))) (lookup-collected s collected)]
          [else (error 'post:generic-ex-record "TODO")]))))
   (define (build-ex-record)
-    (define collected (defb mc))
-    (define result (ast:expr:ex:record rec collected generic-ex-record))
-    (hash-set! memo mc result)
+    (define rcntxt (defb ns))
+    (define result (ast:expr:ex:record rec rcntxt generic-ex-record))
+    (hash-set! memo ns result)
     result)
-  (hash-ref! memo mc build-ex-record))
+  (hash-ref! memo ns build-ex-record))
 
 ;; function context
 (struct function-context [value inputs prev])

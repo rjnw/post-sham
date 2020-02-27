@@ -36,7 +36,7 @@
                      (map tc args (map a:decl-sig arg-decls)))
               env)
           ret-sig))]
-      [(e:record name sig md defb appb) (instantiate-record pe)]
+      [(e:record name sig md defb appb) (expand-record pe)]
       [(e:let sig vars vals bodyb)
        (tc
         (be (bodyb (map tc
@@ -68,12 +68,10 @@
        (if (e:rkt? val)
            (e:rkt-value val)
            val))
-     (printf "interpreting application ~a ~a ~a\n" kw-args f args)
      (if (procedure? f)
          (keyword-apply f kws (map to-rkt-value kw-args) (map to-rkt-value args))
          (keyword-apply f kws kw-args args)))))
 (define (check-type v sig)
-  (printf "check-type: ~a, ~a\n" v (pp:sig sig))
   (of-type v sig))
 
 (define (build-interpreter-context mod-context) mod-context)

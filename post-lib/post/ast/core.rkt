@@ -55,7 +55,8 @@
          (λ (kws kw-args m . rst) (keyword-apply (record-appb m) kws kw-args (cons m rst)))))
       (struct expanded [orig])
       (struct record expanded [collector-context appb] #:property prop:procedure record-app-builder)
-      (struct function expanded [origin-record sham appb] #:property prop:procedure function-app-builder))
+      (struct function expanded [origin-record body appb] #:property prop:procedure function-app-builder)
+      (struct var [name]))
 
     (struct expr ast [(sig #:mutable)])
     (struct type expr [])

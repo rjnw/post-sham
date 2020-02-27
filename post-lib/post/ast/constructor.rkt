@@ -47,7 +47,7 @@
   (define (function name sig bodyb [appb app-builder-generic-function] #:md [md #f])
     (ast:expr:function name sig md bodyb appb))
   (define (record name sig defb [appb app-builder-generic-record] #:md [md #f])
-    (define nmd (if md md (metadata:ast:expr:record (make-hash))))
+    (define nmd (if md md (metadata:ast:expr:record (make-hash) (make-hash))))
     (ast:expr:record name sig nmd defb appb))
   (define (union sig subtype args #:md [md #f])
     (ast:expr:union md sig subtype args))
