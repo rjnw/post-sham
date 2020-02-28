@@ -19,6 +19,4 @@
      (function ([i test2-record-sig-inp] test2-record-sig)
                (record
                 (value s (number->string (i 'v)))))))
-
-
-  )
+  (interpret (test2-functor test1-record)))
